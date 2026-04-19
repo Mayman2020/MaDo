@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { finalize, forkJoin } from 'rxjs';
+import { TimeoutError, finalize, forkJoin, timeout } from 'rxjs';
 import { StreamCardComponent } from '../../shared/components/stream-card/stream-card.component';
 import { SiteFooterComponent } from '../../shared/components/site-footer/site-footer.component';
 import { Category, LiveStream, StreamService } from '../../core/services/stream.service';
@@ -11,343 +11,416 @@ import { Category, LiveStream, StreamService } from '../../core/services/stream.
   imports: [RouterLink, StreamCardComponent, SiteFooterComponent],
   template: `
     <div class="home">
+
       @if (loading) {
-        <div class="home-state">
-          <p class="load-txt">Loading…</p>
+        <div class="sk-hero-wrap">
+          <div class="sk-hero"></div>
+        </div>
+        <div class="section-wrap">
+          <div class="sk-strip">
+            @for (i of [1,2,3,4,5]; track i) {
+              <div class="sk-strip-item">
+                <div class="sk-sthumb"></div>
+                <div class="sk-line sk-w1"></div>
+              </div>
+            }
+          </div>
+          <div class="sk-cats">
+            @for (i of [1,2,3,4,5,6,7,8]; track i) {
+              <div class="sk-cat"></div>
+            }
+          </div>
           <div class="sk-grid">
             @for (i of skeletonSlots; track i) {
               <div class="sk-card">
                 <div class="sk-thumb"></div>
-                <div class="sk-line sk-w1"></div>
-                <div class="sk-line sk-w2"></div>
+                <div class="sk-meta">
+                  <div class="sk-av"></div>
+                  <div class="sk-lines">
+                    <div class="sk-line sk-w1"></div>
+                    <div class="sk-line sk-w2"></div>
+                  </div>
+                </div>
               </div>
             }
           </div>
         </div>
       } @else if (loadError) {
         <div class="home-state err">
+          <div class="err-icon">⚡</div>
           <p>{{ loadError }}</p>
           <button type="button" class="retry" (click)="load()">Retry</button>
         </div>
       } @else {
-      @if (featured) {
-        <section class="hero">
-          <a [routerLink]="['/', featured.username]" class="hero-card mado-card">
-            <div class="hero-info">
-              <div class="hero-avatar">{{ featured.username.charAt(0).toUpperCase() }}</div>
-              <div>
-                <div class="hero-name">{{ featured.username }}</div>
-                <div class="hero-watch">{{ fmt(featured.viewerCount) }} watching</div>
+
+        <!-- HERO -->
+        @if (featured) {
+          <a [routerLink]="['/', featured.username]" class="hero"
+             [style.background-image]="featured.thumbnailUrl ? 'url(' + featured.thumbnailUrl + ')' : 'none'">
+            <div class="hero-overlay"></div>
+            <div class="hero-content">
+              <div class="hero-avatar-wrap">
+                <div class="hero-avatar">{{ featured.username.charAt(0).toUpperCase() }}</div>
+                <span class="hero-live-badge">LIVE</span>
+              </div>
+              <div class="hero-body">
+                <div class="hero-streamer">
+                  <span class="hero-name">{{ featured.username }}</span>
+                  <span class="hero-viewers">
+                    <span class="v-dot"></span>{{ fmt(featured.viewerCount) }} watching
+                  </span>
+                </div>
                 <h2 class="hero-title">{{ featured.title }}</h2>
                 <p class="hero-cat">{{ catName(featured) }}</p>
                 <div class="hero-tags">
-                  <span class="pill">english</span>
-                  <span class="pill">live</span>
+                  <span class="tag">English</span>
+                  <span class="tag">Live</span>
                   @if (featured.categorySlug) {
-                    <span class="pill">{{ slugPretty(featured.categorySlug) }}</span>
+                    <span class="tag">{{ slugPretty(featured.categorySlug) }}</span>
                   }
                 </div>
               </div>
             </div>
-            <div class="hero-media">
-              @if (featured.thumbnailUrl) {
-                <img [src]="featured.thumbnailUrl" [alt]="featured.title" />
-              } @else {
-                <div class="hero-ph"></div>
-              }
-              <span class="hero-live">LIVE</span>
-              <span class="hero-views">{{ fmt(featured.viewerCount) }} watching</span>
-            </div>
+            @if (!featured.thumbnailUrl) {
+              <div class="hero-ph-bg"></div>
+            }
           </a>
-        </section>
-      }
+        }
 
-      @if (featuredStrip.length) {
-        <section class="strip-wrap">
-          <div class="strip-head">
-            <h2 class="h2">Featured live</h2>
-            <a routerLink="/browse" class="view-all">View all</a>
-          </div>
-          <div class="strip">
-            @for (s of featuredStrip; track s.channelId) {
-              <a [routerLink]="['/', s.username]" class="strip-item">
-                <div class="strip-thumb">
-                  @if (s.thumbnailUrl) {
-                    <img [src]="s.thumbnailUrl" [alt]="s.title" />
+        <!-- FEATURED STRIP -->
+        @if (featuredStrip.length) {
+          <section class="section-wrap">
+            <div class="sec-head">
+              <h2 class="sec-title">Featured live</h2>
+              <a routerLink="/browse" class="view-all">View all →</a>
+            </div>
+            <div class="h-scroll">
+              @for (s of featuredStrip; track s.channelId) {
+                <a [routerLink]="['/', s.username]" class="strip-card">
+                  <div class="strip-thumb">
+                    @if (s.thumbnailUrl) {
+                      <img [src]="s.thumbnailUrl" [alt]="s.title" loading="lazy" />
+                    } @else {
+                      <div class="strip-ph"></div>
+                    }
+                    <span class="strip-viewers">{{ fmt(s.viewerCount) }}</span>
+                  </div>
+                  <div class="strip-info">
+                    <div class="strip-av">{{ s.username.charAt(0).toUpperCase() }}</div>
+                    <div class="strip-meta">
+                      <div class="strip-user">{{ s.username }}</div>
+                      <div class="strip-ttl">{{ s.title }}</div>
+                    </div>
+                  </div>
+                </a>
+              }
+            </div>
+          </section>
+        }
+
+        <!-- TOP CATEGORIES -->
+        @if (categories.length) {
+          <section class="section-wrap">
+            <div class="sec-head">
+              <h2 class="sec-title">Top live categories</h2>
+              <a routerLink="/browse" class="view-all">View all →</a>
+            </div>
+            <div class="h-scroll cats-scroll">
+              @for (c of categories; track c.id) {
+                <a [routerLink]="['/browse', c.slug]" class="cat-tile">
+                  @if (c.thumbnailUrl) {
+                    <img [src]="c.thumbnailUrl" [alt]="c.name" loading="lazy" />
+                  } @else {
+                    <div class="cat-ph"></div>
                   }
-                  <span class="strip-v">{{ fmt(s.viewerCount) }}</span>
-                </div>
-                <div class="strip-t">{{ s.title }}</div>
-              </a>
-            }
-          </div>
-        </section>
-      }
+                  <div class="cat-foot">
+                    <span class="cat-name">{{ c.name }}</span>
+                    @if (c.viewerCount) {
+                      <span class="cat-viewers">{{ fmt(c.viewerCount) }}</span>
+                    }
+                  </div>
+                </a>
+              }
+            </div>
+          </section>
+        }
 
-      @if (categories.length) {
-        <section class="cats-section">
-          <div class="strip-head">
-            <h2 class="h2">Top live categories</h2>
-            <a routerLink="/browse" class="view-all">View all</a>
-          </div>
-          <div class="cats-scroll">
-            @for (c of categories; track c.id) {
-              <a [routerLink]="['/browse', c.slug]" class="cat-tile">
-                @if (c.thumbnailUrl) {
-                  <img [src]="c.thumbnailUrl" [alt]="c.name" />
-                } @else {
-                  <div class="cat-ph"></div>
-                }
-                <span class="cat-name">{{ c.name }}</span>
-                @if (c.viewerCount) {
-                  <span class="cat-views">{{ fmt(c.viewerCount) }}</span>
-                }
-              </a>
-            }
-          </div>
-        </section>
-      }
+        <!-- CATEGORY SECTIONS -->
+        @for (sec of categorySections; track sec.slug) {
+          <section class="section-wrap">
+            <div class="sec-head">
+              <h2 class="sec-title">{{ sec.name }}</h2>
+              <a [routerLink]="['/browse', sec.slug]" class="view-all">View all →</a>
+            </div>
+            <div class="stream-grid">
+              @for (s of sec.streams; track s.channelId) {
+                <mado-stream-card [stream]="s" />
+              }
+            </div>
+            <div class="show-more-row">
+              <a [routerLink]="['/browse', sec.slug]" class="show-more">Show more {{ sec.name }}</a>
+            </div>
+          </section>
+        }
 
-      @for (sec of categorySections; track sec.slug) {
-        <section class="grid-wrap">
-          <div class="strip-head">
-            <h2 class="h2 section-cap">{{ sec.name }}</h2>
-            <a [routerLink]="['/browse', sec.slug]" class="view-all">View all</a>
-          </div>
-          <div class="grid">
-            @for (s of sec.streams; track s.channelId) {
-              <mado-stream-card [stream]="s" />
-            }
-          </div>
-          <div class="show-more-row">
-            <a [routerLink]="['/browse', sec.slug]" class="show-more">Show more</a>
-          </div>
-        </section>
-      }
+        <!-- MORE LIVE -->
+        @if (moreLive.length) {
+          <section class="section-wrap">
+            <div class="sec-head">
+              <h2 class="sec-title">More live channels</h2>
+              <a routerLink="/browse" class="view-all">Browse →</a>
+            </div>
+            <div class="stream-grid">
+              @for (s of moreLive; track s.channelId) {
+                <mado-stream-card [stream]="s" />
+              }
+            </div>
+          </section>
+        }
 
-      @if (moreLive.length) {
-        <section class="grid-wrap">
-          <div class="strip-head">
-            <h2 class="h2">More live</h2>
-            <a routerLink="/browse" class="view-all">Browse</a>
+        <!-- EMPTY -->
+        @if (!featured && !featuredStrip.length && !categories.length && !categorySections.length && !moreLive.length) {
+          <div class="empty-wrap">
+            <div class="empty-icon">📡</div>
+            <h2>No live streams right now</h2>
+            <p>Check back later or <a routerLink="/browse">browse categories</a> to find content.</p>
           </div>
-          <div class="grid">
-            @for (s of moreLive; track s.channelId) {
-              <mado-stream-card [stream]="s" />
-            }
-          </div>
-        </section>
-      }
+        }
 
-      <mado-site-footer />
-
-      @if (!featured && !featuredStrip.length && !categories.length && !categorySections.length && !moreLive.length) {
-        <div class="empty-hint mado-card">
-          <p>No live streams right now. Open <a routerLink="/browse">Browse</a> or start your broadcast from the dashboard.</p>
-        </div>
-      }
+        <mado-site-footer />
       }
     </div>
   `,
   styles: [`
     .home {
-      background: #000;
-      min-height: 100%;
-      padding-bottom: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-shell, #0b0e0f);
     }
-    .home-state {
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: 2rem 1rem;
+
+    /* ─── SKELETON ─── */
+    .sk-hero-wrap {
+      width: 100%;
+      height: 420px;
+      background: var(--bg-tertiary);
+      animation: pulse 1.4s ease-in-out infinite;
     }
-    .load-txt { color: var(--text-secondary); margin: 0 0 1rem; }
-    .sk-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 1rem;
-    }
-    .sk-card { animation: pulse 1.2s ease-in-out infinite; }
-    .sk-thumb {
-      aspect-ratio: 16/9;
-      border-radius: 12px;
-      background: linear-gradient(90deg, var(--bg-tertiary), var(--bg-hover), var(--bg-tertiary));
-      background-size: 200% 100%;
-    }
-    .sk-line { height: 10px; border-radius: 4px; margin-top: .5rem; background: var(--bg-tertiary); }
-    .sk-w1 { width: 85%; }
+    @media (max-width: 700px) { .sk-hero-wrap { height: 220px; } }
+    .sk-hero { width: 100%; height: 100%; }
+    .section-wrap { max-width: 1380px; margin: 0 auto; padding: 1.5rem 1.25rem 0; width: 100%; box-sizing: border-box; }
+    .sk-strip { display: flex; gap: .75rem; margin-bottom: 1.5rem; }
+    .sk-strip-item { flex: 0 0 180px; }
+    .sk-sthumb { aspect-ratio: 16/9; border-radius: 8px; background: var(--bg-tertiary); margin-bottom: .35rem; animation: pulse 1.4s ease-in-out infinite; }
+    .sk-cats { display: flex; gap: .75rem; margin-bottom: 1.5rem; overflow: hidden; }
+    .sk-cat { flex: 0 0 130px; height: 175px; border-radius: 10px; background: var(--bg-tertiary); animation: pulse 1.4s ease-in-out infinite; }
+    .sk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 1rem; }
+    .sk-card { animation: pulse 1.4s ease-in-out infinite; }
+    .sk-thumb { aspect-ratio: 16/9; border-radius: 10px; background: var(--bg-tertiary); }
+    .sk-meta { display: flex; gap: .6rem; padding: .5rem 0; }
+    .sk-av { width: 36px; height: 36px; border-radius: 50%; background: var(--bg-tertiary); flex-shrink: 0; }
+    .sk-lines { flex: 1; display: flex; flex-direction: column; gap: .4rem; padding-top: .2rem; }
+    .sk-line { height: 9px; border-radius: 4px; background: var(--bg-tertiary); }
+    .sk-w1 { width: 80%; }
     .sk-w2 { width: 55%; }
-    @keyframes pulse {
-      0%, 100% { opacity: .75; }
-      50% { opacity: 1; }
-    }
-    .home-state.err {
-      text-align: center;
-      color: var(--text-secondary);
-    }
-    .home-state.err .retry {
-      margin-top: 1rem;
+    @keyframes pulse { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
+
+    /* ─── ERROR ─── */
+    .home-state { max-width: 640px; margin: 0 auto; padding: 3rem 1rem; text-align: center; }
+    .home-state.err { color: var(--text-secondary); }
+    .err-icon { font-size: 2.5rem; margin-bottom: 1rem; }
+    .retry {
+      margin-top: 1.25rem;
       background: var(--accent);
       color: #000;
       border: none;
       font-weight: 800;
-      padding: .55rem 1.25rem;
+      padding: .6rem 1.5rem;
       border-radius: 10px;
       cursor: pointer;
       font-family: inherit;
-    }
-    .empty-hint {
-      max-width: 640px;
-      margin: 2rem auto;
-      padding: 1.25rem;
-      color: var(--text-secondary);
       font-size: .95rem;
     }
-    .empty-hint a { color: var(--accent); }
+
+    /* ─── HERO (Kick-style full-width) ─── */
     .hero {
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: 1rem 1rem 0;
-    }
-    .hero-card {
-      display: grid;
-      grid-template-columns: minmax(260px, 1fr) minmax(0, 1.4fr);
-      gap: 1.25rem;
-      padding: 1.25rem;
+      display: block;
+      position: relative;
+      width: 100%;
+      min-height: 400px;
+      max-height: 520px;
+      background-size: cover;
+      background-position: center;
+      background-color: #111;
       text-decoration: none;
       color: inherit;
-      border-radius: 14px;
       overflow: hidden;
-      transition: box-shadow .2s ease, border-color .2s ease;
+      cursor: pointer;
     }
-    .hero-card:hover {
-      box-shadow: 0 16px 48px rgba(0,0,0,.5);
-      border-color: rgba(83, 252, 24, 0.2);
+    @media (max-width: 700px) { .hero { min-height: 240px; } }
+    .hero:hover .hero-overlay { opacity: 1; }
+    .hero-ph-bg {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, #0d1117 0%, #1a1d2e 50%, #0d1117 100%);
     }
-    .hero-info {
+    .hero-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        to right,
+        rgba(0,0,0,.88) 0%,
+        rgba(0,0,0,.65) 35%,
+        rgba(0,0,0,.15) 65%,
+        rgba(0,0,0,.0) 100%
+      );
+      transition: opacity .2s;
+    }
+    .hero-content {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 2rem 2.5rem;
       display: flex;
-      gap: 1rem;
-      align-items: flex-start;
+      align-items: flex-end;
+      gap: 1.25rem;
+      max-width: 640px;
     }
+    @media (max-width: 700px) { .hero-content { padding: 1rem 1.25rem; gap: .75rem; } }
+    .hero-avatar-wrap { position: relative; flex-shrink: 0; }
     .hero-avatar {
-      width: 56px;
-      height: 56px;
+      width: 68px;
+      height: 68px;
       border-radius: 50%;
-      background: var(--bg-tertiary);
-      border: 2px solid var(--accent);
+      background: linear-gradient(135deg, var(--accent), #2d9e0a);
+      border: 3px solid var(--accent);
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 900;
-      font-size: 1.25rem;
-      color: var(--accent);
+      font-size: 1.65rem;
+      color: #000;
+      box-shadow: 0 0 20px rgba(83,252,24,.4);
+    }
+    @media (max-width: 700px) { .hero-avatar { width: 48px; height: 48px; font-size: 1.2rem; } }
+    .hero-live-badge {
+      position: absolute;
+      bottom: -6px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #e53935;
+      color: #fff;
+      font-size: .58rem;
+      font-weight: 900;
+      letter-spacing: .1em;
+      padding: .15rem .4rem;
+      border-radius: 3px;
+      white-space: nowrap;
+    }
+    .hero-body { min-width: 0; flex: 1; }
+    .hero-streamer {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      margin-bottom: .35rem;
+      flex-wrap: wrap;
+    }
+    .hero-name {
+      font-size: 1.15rem;
+      font-weight: 900;
+      color: #fff;
+    }
+    .hero-viewers {
+      display: flex;
+      align-items: center;
+      gap: .3rem;
+      font-size: .82rem;
+      font-weight: 700;
+      color: rgba(255,255,255,.75);
+    }
+    .v-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
       flex-shrink: 0;
     }
-    .hero-name { font-weight: 800; color: var(--text-primary); }
-    .hero-watch {
-      display: inline-block;
-      margin-top: .25rem;
-      font-size: .8rem;
-      font-weight: 700;
-      color: var(--accent);
-      background: rgba(83, 252, 24, 0.1);
-      padding: .15rem .5rem;
-      border-radius: 6px;
-    }
     .hero-title {
-      margin: .75rem 0 .35rem;
-      font-size: 1.15rem;
+      margin: 0 0 .3rem;
+      font-size: 1.4rem;
       font-weight: 800;
-      line-height: 1.3;
-      color: var(--text-primary);
+      line-height: 1.2;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .hero-cat { margin: 0; font-size: .9rem; color: var(--text-muted); text-transform: capitalize; }
-    .hero-tags { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .75rem; }
-    .pill {
+    @media (max-width: 700px) { .hero-title { font-size: 1rem; } }
+    .hero-cat {
+      margin: 0 0 .6rem;
+      font-size: .88rem;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: capitalize;
+    }
+    .hero-tags { display: flex; flex-wrap: wrap; gap: .35rem; }
+    .tag {
       font-size: .72rem;
       font-weight: 600;
-      color: var(--text-secondary);
-      background: var(--bg-tertiary);
-      padding: .2rem .55rem;
+      color: rgba(255,255,255,.7);
+      background: rgba(255,255,255,.1);
+      border: 1px solid rgba(255,255,255,.15);
+      padding: .18rem .55rem;
       border-radius: 999px;
-      border: 1px solid var(--border);
       text-transform: lowercase;
-    }
-    .hero-media {
-      position: relative;
-      border-radius: 12px;
-      overflow: hidden;
-      aspect-ratio: 16/9;
-      min-height: 180px;
-      background: #111;
-    }
-    .hero-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .hero-ph { width: 100%; height: 100%; min-height: 200px; background: linear-gradient(160deg, #1a1a24, #0a0a10); }
-    .hero-live {
-      position: absolute;
-      top: .65rem;
-      left: .65rem;
-      background: var(--accent);
-      color: #000;
-      font-size: .65rem;
-      font-weight: 900;
-      letter-spacing: .08em;
-      padding: .2rem .5rem;
-      border-radius: 4px;
-    }
-    .hero-views {
-      position: absolute;
-      bottom: .65rem;
-      left: .65rem;
-      background: rgba(0,0,0,.75);
-      color: #fff;
-      font-size: .78rem;
-      font-weight: 700;
-      padding: .3rem .6rem;
-      border-radius: 8px;
-    }
-    @media (max-width: 900px) {
-      .hero-card { grid-template-columns: 1fr; }
+      backdrop-filter: blur(4px);
     }
 
-    .strip-wrap, .cats-section, .grid-wrap {
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: 1.5rem 1rem 0;
-    }
-    .strip-head {
+    /* ─── SHARED SECTION ─── */
+    .sec-head {
       display: flex;
       align-items: baseline;
       justify-content: space-between;
       gap: 1rem;
-      margin-bottom: 1rem;
+      margin-bottom: .9rem;
     }
-    .h2 {
+    .sec-title {
       margin: 0;
-      font-size: 1.35rem;
+      font-size: 1.2rem;
       font-weight: 800;
-      color: #fff;
+      color: var(--text-primary);
       text-transform: capitalize;
     }
-    .section-cap { text-transform: none; }
     .view-all {
-      font-size: .88rem;
+      font-size: .85rem;
       font-weight: 700;
       color: var(--accent);
       text-decoration: none;
+      white-space: nowrap;
     }
     .view-all:hover { text-decoration: underline; }
-    .strip {
+
+    /* ─── H-SCROLL STRIP ─── */
+    .h-scroll {
       display: flex;
       gap: .75rem;
       overflow-x: auto;
       padding-bottom: .5rem;
       scrollbar-width: thin;
+      scrollbar-color: var(--bg-hover) transparent;
     }
-    .strip-item {
+    .h-scroll::-webkit-scrollbar { height: 4px; }
+    .h-scroll::-webkit-scrollbar-thumb { background: var(--bg-hover); border-radius: 4px; }
+
+    /* ─── FEATURED STRIP CARDS ─── */
+    .strip-card {
       flex: 0 0 200px;
       text-decoration: none;
       color: inherit;
     }
+    .strip-card:hover .strip-thumb img,
+    .strip-card:hover .strip-ph { filter: brightness(1.1); }
     .strip-thumb {
       position: relative;
       border-radius: 10px;
@@ -356,7 +429,8 @@ import { Category, LiveStream, StreamService } from '../../core/services/stream.
       background: var(--bg-tertiary);
     }
     .strip-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .strip-v {
+    .strip-ph { width: 100%; height: 100%; background: var(--bg-tertiary); }
+    .strip-viewers {
       position: absolute;
       bottom: .35rem;
       left: .35rem;
@@ -364,25 +438,35 @@ import { Category, LiveStream, StreamService } from '../../core/services/stream.
       font-weight: 800;
       color: #fff;
       background: rgba(0,0,0,.7);
-      padding: .12rem .35rem;
+      padding: .1rem .35rem;
       border-radius: 4px;
     }
-    .strip-t {
-      margin-top: .4rem;
-      font-size: .78rem;
-      font-weight: 700;
-      color: var(--text-secondary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .cats-scroll {
+    .strip-info {
       display: flex;
-      gap: .75rem;
-      overflow-x: auto;
-      padding-bottom: .5rem;
+      align-items: center;
+      gap: .45rem;
+      padding: .45rem 0 0;
     }
+    .strip-av {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: .72rem;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+    .strip-meta { min-width: 0; flex: 1; }
+    .strip-user { font-size: .78rem; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .strip-ttl { font-size: .72rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ─── CATEGORY TILES (3:4 portrait, like Kick) ─── */
+    .cats-scroll { align-items: stretch; }
     .cat-tile {
       flex: 0 0 140px;
       position: relative;
@@ -392,54 +476,53 @@ import { Category, LiveStream, StreamService } from '../../core/services/stream.
       text-decoration: none;
       color: #fff;
       border: 1px solid var(--border);
-      transition: transform .15s ease;
+      transition: transform .15s ease, border-color .15s;
+      display: block;
     }
-    .cat-tile:hover { transform: scale(1.03); }
+    .cat-tile:hover { transform: scale(1.03); border-color: rgba(83,252,24,.4); }
     .cat-tile img, .cat-ph {
       width: 100%;
       height: 100%;
       object-fit: cover;
       display: block;
     }
-    .cat-ph { background: linear-gradient(180deg, #252530, #12121a); }
-    .cat-name {
+    .cat-ph { background: linear-gradient(180deg, #1e2230, #0d0f18); }
+    .cat-foot {
       position: absolute;
       bottom: 0;
       left: 0;
       right: 0;
-      padding: .65rem .5rem;
+      padding: .65rem .5rem .5rem;
+      background: linear-gradient(transparent, rgba(0,0,0,.9));
+      display: flex;
+      flex-direction: column;
+      gap: .15rem;
+    }
+    .cat-name {
       font-size: .72rem;
       font-weight: 900;
       text-transform: uppercase;
-      letter-spacing: .03em;
-      background: linear-gradient(transparent, rgba(0,0,0,.9));
+      letter-spacing: .04em;
       text-align: center;
       line-height: 1.2;
     }
-    .cat-views {
-      position: absolute;
-      top: .4rem;
-      right: .4rem;
+    .cat-viewers {
       font-size: .65rem;
       font-weight: 700;
-      background: rgba(0,0,0,.65);
-      padding: .1rem .35rem;
-      border-radius: 4px;
+      color: rgba(255,255,255,.7);
+      text-align: center;
     }
 
-    .grid {
+    /* ─── STREAM GRID ─── */
+    .stream-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
       gap: 1rem;
     }
-    @media (min-width: 1400px) {
-      .grid { grid-template-columns: repeat(5, 1fr); }
-    }
-    .show-more-row {
-      display: flex;
-      justify-content: center;
-      margin-top: 1.25rem;
-    }
+    @media (min-width: 1400px) { .stream-grid { grid-template-columns: repeat(6, 1fr); } }
+
+    /* ─── SHOW MORE ─── */
+    .show-more-row { display: flex; justify-content: center; margin-top: 1.25rem; }
     .show-more {
       display: inline-block;
       padding: .5rem 2rem;
@@ -449,22 +532,30 @@ import { Category, LiveStream, StreamService } from '../../core/services/stream.
       font-weight: 700;
       font-size: .88rem;
       text-decoration: none;
+      transition: border-color .15s, color .15s;
     }
-    .show-more:hover {
-      border-color: var(--accent);
-      color: var(--accent);
+    .show-more:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ─── EMPTY ─── */
+    .empty-wrap {
+      text-align: center;
+      padding: 5rem 1rem;
+      color: var(--text-secondary);
     }
+    .empty-icon { font-size: 3rem; margin-bottom: 1rem; }
+    .empty-wrap h2 { color: var(--text-primary); margin: 0 0 .5rem; }
+    .empty-wrap p { margin: 0; font-size: .95rem; }
+    .empty-wrap a { color: var(--accent); }
   `]
 })
 export class HomeComponent implements OnInit {
-  readonly skeletonSlots = [1, 2, 3, 4, 5, 6, 7, 8];
+  readonly skeletonSlots = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
   loading = true;
   loadError: string | null = null;
 
   featured: LiveStream | null = null;
   featuredStrip: LiveStream[] = [];
-  /** Streams not already shown in hero + strip + category rows (deduped). */
   moreLive: LiveStream[] = [];
   categories: Category[] = [];
   categorySections: { slug: string; name: string; streams: LiveStream[] }[] = [];
@@ -484,7 +575,10 @@ export class HomeComponent implements OnInit {
       live: this.streams.getLiveStreams(0, 60),
       cats: this.streams.getCategories(0, 16)
     })
-      .pipe(finalize(() => (this.loading = false)))
+      .pipe(
+        timeout({ first: 18_000 }),
+        finalize(() => (this.loading = false))
+      )
       .subscribe({
         next: ({ live, cats }) => {
           this.loadError = null;
@@ -495,20 +589,19 @@ export class HomeComponent implements OnInit {
           this.categorySections = this.buildCategorySections(this.allLive);
           this.moreLive = this.computeMoreLive();
         },
-        error: () => {
-          this.loadError =
-            'Could not load the homepage. Confirm the API is running on port 8081 (profile local) and try Retry.';
+        error: (err: unknown) => {
+          if (err instanceof TimeoutError) {
+            this.loadError = 'Request timed out. Start the backend on http://127.0.0.1:8090 (profile: local), then Retry.';
+          } else {
+            this.loadError = 'Could not load the homepage. Confirm the backend is running on http://127.0.0.1:8090 and try Retry.';
+          }
         }
       });
   }
 
   fmt(n: number): string {
-    if (n >= 1_000_000) {
-      return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
-    }
-    if (n >= 1_000) {
-      return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
-    }
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
     return String(n);
   }
 
@@ -524,18 +617,14 @@ export class HomeComponent implements OnInit {
     const map = new Map<string, LiveStream[]>();
     for (const s of streams) {
       const key = s.categorySlug || '';
-      if (!key) {
-        continue;
-      }
-      if (!map.has(key)) {
-        map.set(key, []);
-      }
+      if (!key) continue;
+      if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(s);
     }
     const rows = [...map.entries()].map(([slug, st]) => ({
       slug,
       name: this.titleCase(slug.replace(/-/g, ' ')),
-      streams: [...st].sort((a, b) => b.viewerCount - a.viewerCount).slice(0, 5)
+      streams: [...st].sort((a, b) => b.viewerCount - a.viewerCount).slice(0, 6)
     }));
     rows.sort((a, b) => {
       const ma = Math.max(0, ...a.streams.map((x) => x.viewerCount));
@@ -545,20 +634,11 @@ export class HomeComponent implements OnInit {
     return rows.slice(0, 4);
   }
 
-  /** Streams that are not the featured hero and not in strip or category sections. */
   private computeMoreLive(): LiveStream[] {
     const used = new Set<string>();
-    if (this.featured) {
-      used.add(this.featured.channelId);
-    }
-    for (const s of this.featuredStrip) {
-      used.add(s.channelId);
-    }
-    for (const sec of this.categorySections) {
-      for (const s of sec.streams) {
-        used.add(s.channelId);
-      }
-    }
+    if (this.featured) used.add(this.featured.channelId);
+    for (const s of this.featuredStrip) used.add(s.channelId);
+    for (const sec of this.categorySections) for (const s of sec.streams) used.add(s.channelId);
     return this.allLive.filter((s) => !used.has(s.channelId)).slice(0, 12);
   }
 

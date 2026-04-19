@@ -20,4 +20,8 @@ public interface ChannelRepository extends JpaRepository<Channel, UUID> {
     Page<Channel> findByCategory_SlugAndIsLiveTrueOrderByViewerCountDesc(String slug, Pageable pageable);
 
     Page<Channel> findByIdInAndIsLiveTrueOrderByViewerCountDesc(List<UUID> ids, Pageable pageable);
+
+    Page<Channel> findAllByOrderByFollowerCountDesc(Pageable pageable);
+
+    Page<Channel> findAllByOrderByTotalViewsDesc(Pageable pageable);
 }

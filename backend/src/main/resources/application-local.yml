@@ -1,13 +1,13 @@
 # =============================================================================
 # LOCAL development — same idea as srs-project SRS_System_backend application-local.yml
-# Default HTTP port 8081 so SRS (often 8080) can run at the same time. Override: SERVER_PORT or -Port in run-backend.ps1.
+# Default HTTP port 8090 so SRS (often 8080) can run at the same time. Override: SERVER_PORT or -Port in run-backend.ps1.
 # Default DB: catalogue `postgres`, schema `kick_live` (Flyway create-schemas + JDBC currentSchema).
 # Password chain: DB_PASS → KICK_LOCAL_DB_PASSWORD → DB_PASSWORD (default admin), like SRS + hesabaty.
 # If auth still fails: fix local-credentials.yml, or ensure no stray SPRING_DATASOURCE_PASSWORD in the OS
 # overriding YAML (run-backend.ps1 clears it when using profile local).
 # =============================================================================
 server:
-  port: ${SERVER_PORT:8081}
+  port: ${SERVER_PORT:8090}
 
 spring:
   config:
@@ -20,6 +20,8 @@ spring:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
       port: ${SPRING_DATA_REDIS_PORT:6379}
+      repositories:
+        enabled: false
 
 minio:
   url: ${MINIO_URL:http://localhost:9000}

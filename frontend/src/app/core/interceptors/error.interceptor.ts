@@ -27,7 +27,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       if (!skipGlobalToast(req.url, error)) {
         const message =
           error.status === 0
-            ? 'Cannot reach server. Is the API running (e.g. localhost:8081)?'
+            ? 'Cannot reach server. Is the API running (e.g. http://127.0.0.1:8090)?'
             : error.error?.message || error.message || 'Unexpected error';
         toastr.error(message, 'Request failed');
       }

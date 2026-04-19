@@ -5,6 +5,8 @@ import com.mado.dto.CategoryResponse;
 import com.mado.dto.ChannelPublicResponse;
 import com.mado.dto.ChannelStatsResponse;
 import com.mado.dto.ChannelUpdateRequest;
+import com.mado.dto.ChatSettingsRequest;
+import com.mado.dto.ChatSettingsResponse;
 import com.mado.dto.LiveStreamResponse;
 import com.mado.entity.Category;
 import com.mado.entity.Channel;
@@ -166,6 +168,58 @@ public class ChannelService {
                         ? streamingProperties.getHlsBaseUrl() + "/" + ch.getStreamKey() + "/index.m3u8"
                         : null)
                 .currentStreamId(currentStreamId)
+                .followerCount(ch.getFollowerCount() == null ? 0 : ch.getFollowerCount())
+                .totalViews(ch.getTotalViews() == null ? 0L : ch.getTotalViews())
+                .build();
+    }
+
+    @Transactional
+    public ChatSettingsResponse updateChatSettings(String username, ChatSettingsRequest req, User actor) {
+        Channel ch = channelRepository.findByUserUsername(username)
+                .orElseThrow(() -> new NotFoundException("Channel not found"));
+        if (!ch.getUser().getId().equals(actor.getId()) && actor.getRole() != Role.ADMIN) {
+            throw new BadRequestException("Not allowed");
+        }
+        if (req.getSlowModeSeconds() != null) {
+            ch.setSlowModeSeconds(req.getSlowModeSeconds());
+        }
+        if (req.getFollowersOnlyMode() != null) {
+            ch.setFollowersOnlyMode(req.getFollowersOnlyMode());
+        }
+        if (req.getSubscribersOnlyMode() != null) {
+            ch.setSubscribersOnlyMode(req.getSubscribersOnlyMode());
+        }
+        if (req.getEmotesOnlyMode() != null) {
+            ch.setEmotesOnlyMode(req.getEmotesOnlyMode());
+        }
+        if (req.getMinAccountAgeDays() != null) {
+            ch.setMinAccountAgeDays(req.getMinAccountAgeDays());
+        }
+        return toChatSettings(ch);
+    }
+
+    @Transactional(readOnly = true)
+    public ChatSettingsResponse getChatSettings(String username) {
+        Channel ch = channelRepository.findByUserUsername(username)
+                .orElseThrow(() -> new NotFoundException("Channel not found"));
+        return toChatSettings(ch);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ChannelPublicResponse> leaderboard(String metric, Pageable pageable) {
+        Page<Channel> page = "followers".equals(metric)
+                ? channelRepository.findAllByOrderByFollowerCountDesc(pageable)
+                : channelRepository.findAllByOrderByTotalViewsDesc(pageable);
+        return page.map(this::toPublic);
+    }
+
+    private ChatSettingsResponse toChatSettings(Channel ch) {
+        return ChatSettingsResponse.builder()
+                .slowModeSeconds(ch.getSlowModeSeconds() != null ? ch.getSlowModeSeconds() : 0)
+                .followersOnlyMode(Boolean.TRUE.equals(ch.getFollowersOnlyMode()))
+                .subscribersOnlyMode(Boolean.TRUE.equals(ch.getSubscribersOnlyMode()))
+                .emotesOnlyMode(Boolean.TRUE.equals(ch.getEmotesOnlyMode()))
+                .minAccountAgeDays(ch.getMinAccountAgeDays() != null ? ch.getMinAccountAgeDays() : 0)
                 .build();
     }
 

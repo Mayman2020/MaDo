@@ -1,7 +1,7 @@
 ﻿[CmdletBinding()]
 param(
     [switch]$SkipBuild,
-    [int]$Port = 8081,
+    [int]$Port = 8090,
     [string]$Profile = "local",
     [switch]$UseDockerFallback,
     [switch]$DockerDeps

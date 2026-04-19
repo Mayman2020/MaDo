@@ -13,7 +13,10 @@ import com.mado.repository.BanRepository;
 import com.mado.repository.BannedWordRepository;
 import com.mado.repository.ChannelRepository;
 import com.mado.repository.ChatMessageRepository;
+import com.mado.repository.FollowRepository;
+import com.mado.repository.ModeratorRepository;
 import com.mado.repository.StreamRepository;
+import com.mado.repository.SubscriptionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -21,6 +24,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -35,16 +40,30 @@ public class ChatService {
     private final StreamRepository streamRepository;
     private final BanRepository banRepository;
     private final BannedWordRepository bannedWordRepository;
+    private final FollowRepository followRepository;
+    private final SubscriptionRepository subscriptionRepository;
+    private final ModeratorRepository moderatorRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
     @Transactional
     public ChatMessageResponse send(UUID channelId, ChatSendRequest req, User author) {
         Channel ch = channelRepository.findById(channelId)
                 .orElseThrow(() -> new NotFoundException("Channel not found"));
-        if (isBanned(ch, author)) {
-            throw new BadRequestException("You are banned from this channel");
+
+        boolean isOwner = ch.getUser().getId().equals(author.getId());
+        boolean isMod = moderatorRepository.existsByChannelIdAndUserId(channelId, author.getId());
+
+        if (!isOwner && !isMod) {
+            if (isBanned(ch, author)) {
+                throw new BadRequestException("You are banned from this channel");
+            }
+            assertChatModes(ch, author);
         }
+
         assertNotBannedWord(ch.getId(), req.getContent());
+
+        List<String> badges = buildBadges(ch, author, isOwner, isMod);
+
         Stream stream = streamRepository.findFirstByChannelIdAndEndedAtIsNullOrderByStartedAtDesc(ch.getId())
                 .orElse(null);
         ChatMessage msg = ChatMessage.builder()
@@ -53,6 +72,7 @@ public class ChatService {
                 .stream(stream)
                 .content(req.getContent())
                 .color("#53fc18")
+                .badges(badges.isEmpty() ? null : badges.toArray(new String[0]))
                 .build();
         msg = chatMessageRepository.save(msg);
         ChatMessageResponse dto = toDto(msg);
@@ -62,19 +82,73 @@ public class ChatService {
 
     @Transactional(readOnly = true)
     public List<ChatMessageResponse> recent(UUID channelId, int limit) {
-        List<ChatMessageResponse> list = chatMessageRepository
+        return chatMessageRepository
                 .findByChannelIdAndIsDeletedFalseOrderByCreatedAtDesc(channelId, PageRequest.of(0, limit))
                 .stream()
                 .map(this::toDto)
                 .sorted(Comparator.comparing(ChatMessageResponse::createdAt))
                 .toList();
-        return list;
     }
 
     public void broadcastViewerCount(UUID channelId, int viewers) {
         messagingTemplate.convertAndSend(
                 "/topic/channel." + channelId + ".viewers",
                 java.util.Map.of("viewerCount", viewers));
+    }
+
+    private void assertChatModes(Channel ch, User author) {
+        int slowSec = ch.getSlowModeSeconds() != null ? ch.getSlowModeSeconds() : 0;
+        if (slowSec > 0) {
+            List<ChatMessage> last = chatMessageRepository
+                    .findTop1ByChannelIdAndUser_IdAndIsDeletedFalseOrderByCreatedAtDesc(ch.getId(), author.getId());
+            if (!last.isEmpty()) {
+                Instant allowedAt = last.get(0).getCreatedAt().plusSeconds(slowSec);
+                if (Instant.now().isBefore(allowedAt)) {
+                    long waitMs = Instant.now().until(allowedAt, ChronoUnit.SECONDS);
+                    throw new BadRequestException("Slow mode — wait " + waitMs + "s before sending another message");
+                }
+            }
+        }
+
+        if (Boolean.TRUE.equals(ch.getFollowersOnlyMode())) {
+            boolean follows = followRepository.existsByFollowerIdAndChannelId(author.getId(), ch.getId());
+            if (!follows) {
+                throw new BadRequestException("Followers-only mode — follow the channel to chat");
+            }
+        }
+
+        if (Boolean.TRUE.equals(ch.getSubscribersOnlyMode())) {
+            boolean subbed = subscriptionRepository
+                    .findBySubscriber_IdAndChannel_IdAndIsActiveTrue(author.getId(), ch.getId())
+                    .isPresent();
+            if (!subbed) {
+                throw new BadRequestException("Subscribers-only mode — subscribe to chat");
+            }
+        }
+
+        int minAgeDays = ch.getMinAccountAgeDays() != null ? ch.getMinAccountAgeDays() : 0;
+        if (minAgeDays > 0 && author.getCreatedAt() != null) {
+            long ageDays = author.getCreatedAt().until(Instant.now(), ChronoUnit.DAYS);
+            if (ageDays < minAgeDays) {
+                throw new BadRequestException("Account must be at least " + minAgeDays + " day(s) old to chat here");
+            }
+        }
+    }
+
+    private List<String> buildBadges(Channel ch, User author, boolean isOwner, boolean isMod) {
+        List<String> badges = new ArrayList<>();
+        if (isOwner) {
+            badges.add("streamer");
+        } else if (isMod) {
+            badges.add("mod");
+        }
+        boolean subbed = subscriptionRepository
+                .findBySubscriber_IdAndChannel_IdAndIsActiveTrue(author.getId(), ch.getId())
+                .isPresent();
+        if (subbed) {
+            badges.add("sub");
+        }
+        return badges;
     }
 
     private boolean isBanned(Channel ch, User author) {
@@ -103,6 +177,7 @@ public class ChatService {
 
     private ChatMessageResponse toDto(ChatMessage m) {
         User u = m.getUser();
+        List<String> badges = m.getBadges() != null ? List.of(m.getBadges()) : List.of();
         return ChatMessageResponse.builder()
                 .id(m.getId())
                 .username(u != null ? u.getUsername() : "system")
@@ -110,6 +185,7 @@ public class ChatService {
                 .content(m.getContent())
                 .createdAt(m.getCreatedAt())
                 .color(m.getColor())
+                .badges(badges)
                 .build();
     }
 }

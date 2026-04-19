@@ -3,6 +3,8 @@ package com.mado.controller;
 import com.mado.dto.ChannelPublicResponse;
 import com.mado.dto.ChannelStatsResponse;
 import com.mado.dto.ChannelUpdateRequest;
+import com.mado.dto.ChatSettingsRequest;
+import com.mado.dto.ChatSettingsResponse;
 import com.mado.dto.LiveStreamResponse;
 import com.mado.security.CustomUserDetails;
 import com.mado.service.ChannelService;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
@@ -60,5 +63,25 @@ public class ChannelController {
             @AuthenticationPrincipal CustomUserDetails principal) {
         String key = channelService.resetStreamKey(username, principal.user());
         return ResponseEntity.ok(Map.of("streamKey", key));
+    }
+
+    @GetMapping("/{username}/chat-settings")
+    public ResponseEntity<ChatSettingsResponse> getChatSettings(@PathVariable String username) {
+        return ResponseEntity.ok(channelService.getChatSettings(username));
+    }
+
+    @PatchMapping("/{username}/chat-settings")
+    public ResponseEntity<ChatSettingsResponse> updateChatSettings(
+            @PathVariable String username,
+            @Valid @RequestBody ChatSettingsRequest request,
+            @AuthenticationPrincipal CustomUserDetails principal) {
+        return ResponseEntity.ok(channelService.updateChatSettings(username, request, principal.user()));
+    }
+
+    @GetMapping("/leaderboard")
+    public ResponseEntity<Page<ChannelPublicResponse>> leaderboard(
+            @RequestParam(defaultValue = "views") String metric,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(channelService.leaderboard(metric, pageable));
     }
 }

@@ -2,6 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { ToastrService } from 'ngx-toastr';
 import { AuthService } from '../../core/services/auth.service';
 import {
@@ -11,6 +12,14 @@ import {
 } from '../../core/services/engagement.service';
 import { Category, ChannelPublic, StreamService } from '../../core/services/stream.service';
 import { environment } from '../../../environments/environment';
+
+interface ChatSettings {
+  slowModeSeconds: number;
+  followersOnlyMode: boolean;
+  subscribersOnlyMode: boolean;
+  emotesOnlyMode: boolean;
+  minAccountAgeDays: number;
+}
 
 @Component({
   selector: 'mado-dashboard',
@@ -111,6 +120,59 @@ import { environment } from '../../../environments/environment';
             <button type="button" class="btn" (click)="addEmote()">Add emote</button>
           </div>
         </section>
+
+        <section class="mado-card block">
+          <h2>Chat settings</h2>
+          @if (chatSettings) {
+            <div class="chat-set-grid">
+              <div class="cs-row">
+                <label class="cs-label">
+                  <input type="checkbox" [(ngModel)]="chatSettings.followersOnlyMode" (change)="saveChatSettings()" />
+                  Followers-only mode
+                </label>
+                <span class="cs-hint">Only followers can send messages</span>
+              </div>
+              <div class="cs-row">
+                <label class="cs-label">
+                  <input type="checkbox" [(ngModel)]="chatSettings.subscribersOnlyMode" (change)="saveChatSettings()" />
+                  Subscribers-only mode
+                </label>
+                <span class="cs-hint">Only subscribers can chat</span>
+              </div>
+              <div class="cs-row">
+                <label class="cs-label">
+                  <input type="checkbox" [(ngModel)]="chatSettings.emotesOnlyMode" (change)="saveChatSettings()" />
+                  Emotes-only mode
+                </label>
+                <span class="cs-hint">Messages must contain only emote codes</span>
+              </div>
+              <div class="cs-field-row">
+                <label class="cs-field-label">Slow mode (seconds)</label>
+                <input
+                  type="number"
+                  min="0" max="120"
+                  class="cs-num"
+                  [(ngModel)]="chatSettings.slowModeSeconds"
+                  placeholder="0 = off"
+                />
+                <button class="btn secondary" (click)="saveChatSettings()">Apply</button>
+              </div>
+              <div class="cs-field-row">
+                <label class="cs-field-label">Min account age (days)</label>
+                <input
+                  type="number"
+                  min="0" max="365"
+                  class="cs-num"
+                  [(ngModel)]="chatSettings.minAccountAgeDays"
+                  placeholder="0 = off"
+                />
+                <button class="btn secondary" (click)="saveChatSettings()">Apply</button>
+              </div>
+            </div>
+          } @else {
+            <p class="hint">Loading…</p>
+          }
+        </section>
       } @else {
         <p>Loading channel…</p>
       }
@@ -161,6 +223,14 @@ import { environment } from '../../../environments/environment';
     .emote-grid { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem; }
     .em { display: flex; flex-direction: column; align-items: center; gap: .25rem; font-size: .75rem; }
     .em img { width: 48px; height: 48px; object-fit: contain; background: var(--bg-tertiary); border-radius: 8px; }
+    .chat-set-grid { display: flex; flex-direction: column; gap: .85rem; }
+    .cs-row { display: flex; flex-direction: column; gap: .15rem; }
+    .cs-label { display: flex; align-items: center; gap: .5rem; font-weight: 700; cursor: pointer; }
+    .cs-label input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+    .cs-hint { font-size: .8rem; color: var(--text-muted); padding-left: 1.35rem; }
+    .cs-field-row { display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; }
+    .cs-field-label { font-weight: 700; font-size: .88rem; min-width: 170px; }
+    .cs-num { width: 80px; text-align: center; }
   `]
 })
 export class DashboardComponent implements OnInit {
@@ -183,10 +253,13 @@ export class DashboardComponent implements OnInit {
   emoteCode = '';
   emoteUrl = '';
 
+  chatSettings: ChatSettings | null = null;
+
   constructor(
     private readonly auth: AuthService,
     private readonly streams: StreamService,
     private readonly engagement: EngagementService,
+    private readonly http: HttpClient,
     private readonly toastr: ToastrService
   ) {}
 
@@ -198,8 +271,25 @@ export class DashboardComponent implements OnInit {
     this.streams.getChannel(u.username).subscribe((ch) => {
       this.channel = ch;
       this.reloadSchedulesEmotes(u.username);
+      this.loadChatSettings(u.username);
     });
     this.streams.getCategories(0, 100).subscribe((p) => (this.categories = p.content ?? []));
+  }
+
+  loadChatSettings(username: string): void {
+    this.http.get<ChatSettings>(`/api/channels/${encodeURIComponent(username)}/chat-settings`).subscribe({
+      next: (s) => (this.chatSettings = s),
+      error: () => (this.chatSettings = { slowModeSeconds: 0, followersOnlyMode: false, subscribersOnlyMode: false, emotesOnlyMode: false, minAccountAgeDays: 0 })
+    });
+  }
+
+  saveChatSettings(): void {
+    const u = this.auth.currentUser$.value;
+    if (!u || !this.chatSettings) return;
+    this.http.patch(`/api/channels/${encodeURIComponent(u.username)}/chat-settings`, this.chatSettings).subscribe({
+      next: () => this.toastr.success('Chat settings saved'),
+      error: () => this.toastr.error('Could not save chat settings')
+    });
   }
 
   reloadSchedulesEmotes(username: string): void {

@@ -1,9 +1,9 @@
-# Quick API smoke check (backend on 8081 with profile local, matching Angular proxy).
+# Quick API smoke check (backend on 127.0.0.1:8090 with profile local, matching Angular proxy).
 # Usage: .\scripts\smoke-api.ps1
 # Exit 0 = OK, 1 = failure
 
 $ErrorActionPreference = "Stop"
-$base = "http://localhost:8081"
+$base = "http://127.0.0.1:8090"
 
 function Test-Endpoint($name, $uri) {
     try {

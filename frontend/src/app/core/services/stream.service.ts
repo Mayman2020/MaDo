@@ -78,6 +78,10 @@ export class StreamService {
     return this.http.get<ChannelPublic>(`/api/channels/${encodeURIComponent(username)}`);
   }
 
+  updateChannel(username: string, body: Partial<{ title: string; description: string; categorySlug: string }>): Observable<ChannelPublic> {
+    return this.http.patch<ChannelPublic>(`/api/channels/${encodeURIComponent(username)}`, body);
+  }
+
   getChannelStats(username: string): Observable<ChannelStatsResponse> {
     return this.http.get<ChannelStatsResponse>(`/api/channels/${encodeURIComponent(username)}/stats`);
   }

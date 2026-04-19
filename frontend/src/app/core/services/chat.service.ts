@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { Client, IMessage } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { BehaviorSubject, Observable, Subject } from 'rxjs';
+import { resolveApiBaseUrl } from '../../../environments/api-url';
 import { AuthService } from './auth.service';
 
 export interface ChatMessage {
@@ -11,6 +12,7 @@ export interface ChatMessage {
   content: string;
   createdAt: string;
   color: string | null;
+  badges: string[] | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -26,8 +28,10 @@ export class ChatService {
   connect(channelId: string): void {
     this.disconnect();
     const token = this.auth.getAccessToken();
+    const base = resolveApiBaseUrl().replace(/\/$/, '');
+    const sockUrl = base ? `${base}/ws` : '/ws';
     this.client = new Client({
-      webSocketFactory: () => new SockJS('/ws') as unknown as WebSocket,
+      webSocketFactory: () => new SockJS(sockUrl) as unknown as WebSocket,
       connectHeaders: token ? { Authorization: `Bearer ${token}` } : {},
       reconnectDelay: 5000,
       heartbeatIncoming: 10000,

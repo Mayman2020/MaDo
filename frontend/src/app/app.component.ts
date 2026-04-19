@@ -1,7 +1,7 @@
 import { AsyncPipe } from '@angular/common';
 import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { filter, Subscription, switchMap, of, forkJoin, map, catchError, distinctUntilChanged } from 'rxjs';
+import { filter, Subscription, switchMap, of, forkJoin, map, catchError, distinctUntilChanged, timeout } from 'rxjs';
 import { AuthService } from './core/services/auth.service';
 import { FollowService } from './core/services/follow.service';
 import { LiveStream, StreamService } from './core/services/stream.service';
@@ -17,6 +17,7 @@ import { LiveStream, StreamService } from './core/services/stream.service';
         <nav class="primary">
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"><span class="nav-ic" aria-hidden="true">⌂</span> Home</a>
           <a routerLink="/browse" routerLinkActive="active"><span class="nav-ic" aria-hidden="true">▢</span> Browse</a>
+          <a routerLink="/leaderboard" routerLinkActive="active"><span class="nav-ic" aria-hidden="true">🏆</span> Leaderboard</a>
           @if (auth.isLoggedIn$ | async) {
             <a routerLink="/following" routerLinkActive="active"><span class="nav-ic" aria-hidden="true">♥</span> Following</a>
             <a routerLink="/subscriptions" routerLinkActive="active">Subs</a>
@@ -38,9 +39,12 @@ import { LiveStream, StreamService } from './core/services/stream.service';
               @if (liveFollowing.length === 0) {
                 <p class="side-empty">No one you follow is live.</p>
               }
-              @for (s of liveFollowing; track s.streamId ?? s.username) {
+              @for (s of liveFollowing; track s.channelId) {
                 <a class="side-item" [routerLink]="['/', s.username]">
-                  <span class="dot live"></span>
+                  <div class="side-av">
+                    {{ s.username.charAt(0).toUpperCase() }}
+                    <span class="av-live-dot"></span>
+                  </div>
                   <div class="side-txt">
                     <span class="side-name">{{ s.username }}</span>
                     <span class="side-sub">{{ catLabel(s) }}</span>
@@ -60,9 +64,12 @@ import { LiveStream, StreamService } from './core/services/stream.service';
           <div class="side-section">
             <div class="side-h">Recommended</div>
             <div class="side-scroll" [class.expanded]="recommendedExpanded">
-              @for (s of recommended; track s.streamId ?? s.username) {
+              @for (s of recommended; track s.channelId) {
                 <a class="side-item" [routerLink]="['/', s.username]">
-                  <span class="dot live"></span>
+                  <div class="side-av">
+                    {{ s.username.charAt(0).toUpperCase() }}
+                    <span class="av-live-dot"></span>
+                  </div>
                   <div class="side-txt">
                     <span class="side-name">{{ s.username }}</span>
                     <span class="side-sub">{{ catLabel(s) }}</span>
@@ -212,30 +219,51 @@ import { LiveStream, StreamService } from './core/services/stream.service';
     .side-empty {
       font-size: .78rem;
       color: var(--text-muted);
-      padding: .25rem .5rem;
+      padding: .35rem .5rem;
       margin: 0;
+      font-style: italic;
     }
     .side-item {
       display: flex;
       align-items: center;
-      gap: .45rem;
-      padding: .35rem .5rem;
+      gap: .5rem;
+      padding: .3rem .4rem;
       border-radius: 8px;
       text-decoration: none;
       color: inherit;
       font-size: .82rem;
+      transition: background .12s;
     }
     .side-item:hover { background: var(--bg-hover); }
-    .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
+    .side-av {
+      position: relative;
       flex-shrink: 0;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: .82rem;
+      color: var(--accent);
     }
-    .dot.live { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
-    .side-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .1rem; }
-    .side-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .side-sub { font-size: .72rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .av-live-dot {
+      position: absolute;
+      bottom: -1px;
+      right: -1px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid var(--bg-shell, #0b0e0f);
+      box-shadow: 0 0 6px rgba(83,252,24,.6);
+    }
+    .side-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .08rem; }
+    .side-name { font-weight: 700; font-size: .84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary); }
+    .side-sub { font-size: .72rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: capitalize; }
     .side-n { font-size: .72rem; color: var(--accent); font-weight: 700; flex-shrink: 0; }
     .main-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
     .topbar {
@@ -357,7 +385,13 @@ import { LiveStream, StreamService } from './core/services/stream.service';
     .auth { display: flex; gap: 1rem; align-items: center; }
     .auth a { color: var(--text-primary); text-decoration: none; font-weight: 600; }
     .auth a.accent { color: var(--accent); }
-    main { padding: 0; flex: 1; }
+    main {
+      padding: 0;
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
     @media (max-width: 900px) {
       .search-center { position: relative; left: auto; transform: none; width: 100%; max-width: none; }
       .topbar { flex-wrap: wrap; justify-content: flex-end; }
@@ -397,13 +431,17 @@ export class AppComponent implements OnInit, OnDestroy {
           if (!logged) {
             this.liveFollowing = [];
             return this.streams.getLiveStreams(0, 60).pipe(
+              timeout({ first: 20_000 }),
               map((r) => r.content ?? []),
               catchError(() => of([] as LiveStream[]))
             );
           }
           return forkJoin({
             fol: this.follows.getLiveFollowing(0, 16).pipe(catchError(() => of({ content: [] as LiveStream[] }))),
-            all: this.streams.getLiveStreams(0, 60).pipe(catchError(() => of({ content: [] as LiveStream[] })))
+            all: this.streams.getLiveStreams(0, 60).pipe(
+              timeout({ first: 20_000 }),
+              catchError(() => of({ content: [] as LiveStream[] }))
+            )
           }).pipe(
             map(({ fol, all }) => {
               this.liveFollowing = fol.content ?? [];

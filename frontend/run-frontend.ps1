@@ -16,7 +16,7 @@ if (Test-Path $proxyConfigPath) {
 }
 
 if ([string]::IsNullOrWhiteSpace($proxyTarget)) {
-    $proxyTarget = "http://localhost:8081"
+    $proxyTarget = "http://127.0.0.1:8090"
 }
 
 Write-Host "[run-frontend] LOCAL development: ng serve --configuration=development (proxy /api,/ws -> $proxyTarget)" -ForegroundColor Cyan

@@ -18,6 +18,8 @@ public record ChannelPublicResponse(
         String streamKey,
         String hlsMasterUrl,
         /** Active stream session id when live; used for analytics & deep links. */
-        UUID currentStreamId
+        UUID currentStreamId,
+        int followerCount,
+        long totalViews
 ) {
 }

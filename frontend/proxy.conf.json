@@ -1,12 +1,12 @@
 {
   "/api": {
-    "target": "http://localhost:8081",
+    "target": "http://127.0.0.1:8090",
     "secure": false,
     "changeOrigin": true,
     "logLevel": "info"
   },
   "/ws": {
-    "target": "http://localhost:8081",
+    "target": "http://127.0.0.1:8090",
     "secure": false,
     "changeOrigin": true,
     "ws": true

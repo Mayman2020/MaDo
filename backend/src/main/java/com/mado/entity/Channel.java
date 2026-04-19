@@ -90,6 +90,24 @@ public class Channel {
     @Column(name = "is_subscription_enabled")
     private Boolean isSubscriptionEnabled;
 
+    @Column(name = "channel_points_enabled")
+    private Boolean channelPointsEnabled;
+
+    @Column(name = "slow_mode_seconds")
+    private Integer slowModeSeconds;
+
+    @Column(name = "followers_only_mode")
+    private Boolean followersOnlyMode;
+
+    @Column(name = "subscribers_only_mode")
+    private Boolean subscribersOnlyMode;
+
+    @Column(name = "emotes_only_mode")
+    private Boolean emotesOnlyMode;
+
+    @Column(name = "min_account_age_days")
+    private Integer minAccountAgeDays;
+
     @Column(name = "created_at")
     private Instant createdAt;
 
@@ -127,6 +145,24 @@ public class Channel {
         }
         if (isSubscriptionEnabled == null) {
             isSubscriptionEnabled = false;
+        }
+        if (channelPointsEnabled == null) {
+            channelPointsEnabled = false;
+        }
+        if (slowModeSeconds == null) {
+            slowModeSeconds = 0;
+        }
+        if (followersOnlyMode == null) {
+            followersOnlyMode = false;
+        }
+        if (subscribersOnlyMode == null) {
+            subscribersOnlyMode = false;
+        }
+        if (emotesOnlyMode == null) {
+            emotesOnlyMode = false;
+        }
+        if (minAccountAgeDays == null) {
+            minAccountAgeDays = 0;
         }
     }
 
