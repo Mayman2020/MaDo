@@ -16,6 +16,7 @@ public class UserResponse {
     private String email;
     private String displayName;
     private String avatarUrl;
+    private String bio;
     private Role role;
     private Boolean isVerified;
 }

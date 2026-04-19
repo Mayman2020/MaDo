@@ -39,7 +39,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/madodb
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/madodb?currentSchema=kick_live
       SPRING_DATASOURCE_USERNAME: mado
       SPRING_DATASOURCE_PASSWORD: mado_secret
       SPRING_DATA_REDIS_HOST: redis

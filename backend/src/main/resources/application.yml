@@ -1,9 +1,13 @@
+# Docker Compose / container: use application.yml defaults (service hostname `postgres`, user mado).
+# Host dev: use profile `local` (see application-local.yml) — same pattern as srs-project (postgres DB + schema-only app schema).
 spring:
   datasource:
-    url: jdbc:postgresql://postgres:5432/madodb
-    username: mado
-    password: mado_secret
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/madodb?currentSchema=kick_live}
+    username: ${SPRING_DATASOURCE_USERNAME:mado}
+    password: ${SPRING_DATASOURCE_PASSWORD:mado_secret}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-init-sql: SET search_path TO kick_live, public
   jpa:
     hibernate:
       ddl-auto: validate
@@ -11,9 +15,18 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        default_schema: kick_live
         format_sql: true
-  liquibase:
-    change-log: classpath:db/changelog/db.changelog-master.xml
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    init-sqls:
+      - SET search_path TO kick_live, public
+    baseline-on-migrate: true
+    repair-on-migrate: true
+    schemas: kick_live
+    default-schema: kick_live
+    create-schemas: true
   data:
     redis:
       host: redis
@@ -44,3 +57,7 @@ stripe:
 
 server:
   port: 8080
+
+app:
+  streaming:
+    hls-base-url: ${HLS_PUBLIC_BASE_URL:http://localhost:8088/hls}

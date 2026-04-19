@@ -2,7 +2,7 @@
 
 MaDo is a live-streaming platform foundation built with:
 - Angular 17 + NgRx + Tailwind + Angular Material
-- Spring Boot 3.2 + Java 21 + JWT + Liquibase + PostgreSQL + Redis
+- Spring Boot 3.2 + Java 21 + JWT + Flyway + PostgreSQL + Redis
 - nginx-rtmp + FFmpeg multi-quality HLS
 - Docker Compose (frontend, backend, postgres, redis, minio, nginx-rtmp)
 
@@ -18,7 +18,7 @@ MaDo is a live-streaming platform foundation built with:
   - `POST /api/auth/verify-email` (placeholder)
   - `POST /api/auth/forgot-password` (placeholder)
   - `POST /api/auth/reset-password` (placeholder)
-- Liquibase migration with full initial PostgreSQL schema and indexes
+- Flyway migration with full initial PostgreSQL schema and indexes (`kick_live` schema)
 - Angular standalone app foundation:
   - routing shell
   - NgRx auth state
@@ -34,6 +34,10 @@ MaDo is a live-streaming platform foundation built with:
 3. Frontend: `http://localhost:4200`
 4. Backend: `http://localhost:8080`
 5. HLS: `http://localhost:8088/hls/{streamKey}/index.m3u8`
+
+## Local Run Scripts
+- Backend: `.\backend\run-backend.ps1` or `.\backend\run-backend.bat`
+- Frontend: `.\frontend\run-frontend.ps1` or `.\frontend\run-frontend.bat`
 
 ## OBS Setup
 - Server: `rtmp://YOUR_SERVER_IP:1935/live`

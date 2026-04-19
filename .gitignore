@@ -6,6 +6,7 @@ Thumbs.db
 !.env.example
 
 # Backend
+backend/local-credentials.yml
 backend/target/
 backend/.mvn/
 backend/*.iml

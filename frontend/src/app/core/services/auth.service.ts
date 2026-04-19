@@ -51,6 +51,12 @@ export class AuthService {
     );
   }
 
+  /** Updates cached user after profile edits (no token change). */
+  updateLocalUser(user: User): void {
+    localStorage.setItem('mado_user', JSON.stringify(user));
+    this.currentUser$.next(user);
+  }
+
   logout(): void {
     const refreshToken = localStorage.getItem('mado_refresh_token');
     if (refreshToken) {

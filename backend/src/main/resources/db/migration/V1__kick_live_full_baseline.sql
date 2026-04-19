@@ -1,3 +1,6 @@
+﻿CREATE SCHEMA IF NOT EXISTS kick_live;
+SET search_path TO kick_live, public;
+
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE users (

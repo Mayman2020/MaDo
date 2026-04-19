@@ -4,6 +4,7 @@
 
 :root {
   --bg-primary: #0a0a0f;
+  --bg-shell: #0b0e0f;
   --bg-secondary: #111118;
   --bg-tertiary: #1a1a24;
   --bg-card: #16161e;
@@ -18,7 +19,7 @@
   --warning: #ffa825;
   --info: #00bbf9;
   --border: rgba(255, 255, 255, 0.07);
-  --sidebar-width: 240px;
+  --sidebar-width: 280px;
   --chat-width: 320px;
 }
 
@@ -31,7 +32,7 @@ html, body {
   min-height: 100%;
   background: radial-gradient(circle at 20% 0, #141421, var(--bg-primary) 50%);
   color: var(--text-primary);
-  font-family: "DM Sans", sans-serif;
+  font-family: "Inter", "DM Sans", sans-serif;
 }
 
 .mado-heading {
