@@ -1,0 +1,22 @@
+# General
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
+
+# Backend
+backend/target/
+backend/.mvn/
+backend/*.iml
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+frontend/.vscode/
+frontend/package-lock.json
+
+# Logs
+*.log
+logs/
