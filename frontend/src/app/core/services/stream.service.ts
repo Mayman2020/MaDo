@@ -25,8 +25,14 @@ export interface ChannelPublic {
   categoryName: string | null;
   streamKey: string;
   hlsMasterUrl: string | null;
+  followerCount?: number;
+  totalViews?: number;
   /** Present when channel is live — for analytics API. */
   currentStreamId?: string | null;
+  isSubscriptionEnabled?: boolean;
+  subPriceTier1?: number | null;
+  subPriceTier2?: number | null;
+  subPriceTier3?: number | null;
 }
 
 export interface ChannelStatsResponse {

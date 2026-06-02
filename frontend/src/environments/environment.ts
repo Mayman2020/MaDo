@@ -6,5 +6,6 @@ export const environment = {
   /** Unused in dev when `resolveApiBaseUrl()` picks proxy mode; kept for typing parity with prod. */
   apiBaseUrl: 'http://127.0.0.1:8090',
   /** SRS / nginx-rtmp style ingest — adjust to your media server. */
-  rtmpIngestUrl: 'rtmp://127.0.0.1:1935/live'
+  rtmpIngestUrl: 'rtmp://127.0.0.1:1935/live',
+  stripePublishableKey: 'pk_test_REPLACE_WITH_YOUR_STRIPE_PUBLISHABLE_KEY'
 };

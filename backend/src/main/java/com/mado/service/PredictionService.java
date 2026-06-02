@@ -16,13 +16,16 @@ import com.mado.repository.PredictionOptionRepository;
 import com.mado.repository.PredictionRepository;
 import com.mado.security.ChannelAuthorizationHelper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -33,6 +36,7 @@ public class PredictionService {
     private final PredictionEntryRepository predictionEntryRepository;
     private final ChannelPointRepository channelPointRepository;
     private final ChannelAuthorizationHelper channelAuth;
+    private final SimpMessagingTemplate messaging;
 
     @Transactional(readOnly = true)
     public List<Prediction> active(String channelUsername) {
@@ -67,7 +71,9 @@ public class PredictionService {
                     .build();
             prediction.getOptions().add(o);
         }
-        return predictionRepository.save(prediction);
+        Prediction saved = predictionRepository.save(prediction);
+        broadcast(ch.getId(), saved);
+        return saved;
     }
 
     @Transactional
@@ -110,6 +116,7 @@ public class PredictionService {
                 .user(user)
                 .pointsWagered(wager)
                 .build());
+        broadcast(ch.getId(), prediction);
     }
 
     @Transactional
@@ -176,7 +183,8 @@ public class PredictionService {
         prediction.setWinningOptionId(winningOptionId);
         prediction.setStatus("RESOLVED");
         prediction.setResolvedAt(Instant.now());
-        predictionRepository.save(prediction);
+        Prediction saved = predictionRepository.save(prediction);
+        broadcast(ch.getId(), saved);
     }
 
     @Transactional
@@ -203,6 +211,26 @@ public class PredictionService {
         }
         prediction.setStatus("CANCELLED");
         prediction.setResolvedAt(Instant.now());
-        predictionRepository.save(prediction);
+        Prediction saved = predictionRepository.save(prediction);
+        broadcast(ch.getId(), saved);
+    }
+
+    private void broadcast(UUID channelId, Prediction prediction) {
+        var options = prediction.getOptions().stream()
+                .map(o -> Map.<String, Object>of(
+                        "id", o.getId().toString(),
+                        "title", o.getTitle(),
+                        "totalPoints", o.getTotalPoints() != null ? o.getTotalPoints() : 0L,
+                        "participantCount", o.getParticipantCount() != null ? o.getParticipantCount() : 0))
+                .collect(Collectors.toList());
+        Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("id", prediction.getId().toString());
+        payload.put("title", prediction.getTitle());
+        payload.put("status", prediction.getStatus());
+        payload.put("options", options);
+        if (prediction.getWinningOptionId() != null) {
+            payload.put("winningOptionId", prediction.getWinningOptionId().toString());
+        }
+        messaging.convertAndSend("/topic/channel." + channelId + ".predictions", payload);
     }
 }

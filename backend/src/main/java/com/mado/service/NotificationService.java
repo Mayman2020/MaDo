@@ -4,6 +4,7 @@ import com.mado.entity.Notification;
 import com.mado.entity.User;
 import com.mado.exception.NotFoundException;
 import com.mado.repository.NotificationRepository;
+import com.mado.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,6 +18,20 @@ import java.util.UUID;
 public class NotificationService {
 
     private final NotificationRepository notificationRepository;
+    private final UserRepository userRepository;
+
+    @Transactional
+    public Notification create(UUID targetUserId, String type, String title, String message) {
+        User user = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new NotFoundException("User not found"));
+        return notificationRepository.save(Notification.builder()
+                .user(user)
+                .type(type)
+                .title(title)
+                .message(message)
+                .isRead(false)
+                .build());
+    }
 
     @Transactional(readOnly = true)
     public Page<Notification> mine(User user, Pageable pageable) {

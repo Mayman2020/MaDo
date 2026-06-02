@@ -90,6 +90,15 @@ public class Channel {
     @Column(name = "is_subscription_enabled")
     private Boolean isSubscriptionEnabled;
 
+    @Column(name = "sub_price_tier1", precision = 10, scale = 2)
+    private java.math.BigDecimal subPriceTier1;
+
+    @Column(name = "sub_price_tier2", precision = 10, scale = 2)
+    private java.math.BigDecimal subPriceTier2;
+
+    @Column(name = "sub_price_tier3", precision = 10, scale = 2)
+    private java.math.BigDecimal subPriceTier3;
+
     @Column(name = "channel_points_enabled")
     private Boolean channelPointsEnabled;
 
@@ -145,6 +154,15 @@ public class Channel {
         }
         if (isSubscriptionEnabled == null) {
             isSubscriptionEnabled = false;
+        }
+        if (subPriceTier1 == null) {
+            subPriceTier1 = new java.math.BigDecimal("4.99");
+        }
+        if (subPriceTier2 == null) {
+            subPriceTier2 = new java.math.BigDecimal("9.99");
+        }
+        if (subPriceTier3 == null) {
+            subPriceTier3 = new java.math.BigDecimal("24.99");
         }
         if (channelPointsEnabled == null) {
             channelPointsEnabled = false;

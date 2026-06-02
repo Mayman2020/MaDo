@@ -2,6 +2,7 @@ package com.mado.dto;
 
 import lombok.Builder;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @Builder
@@ -20,6 +21,10 @@ public record ChannelPublicResponse(
         /** Active stream session id when live; used for analytics & deep links. */
         UUID currentStreamId,
         int followerCount,
-        long totalViews
+        long totalViews,
+        boolean isSubscriptionEnabled,
+        BigDecimal subPriceTier1,
+        BigDecimal subPriceTier2,
+        BigDecimal subPriceTier3
 ) {
 }

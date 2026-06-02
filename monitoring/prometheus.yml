@@ -1,0 +1,26 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  external_labels:
+    env: production
+    app: mado-platform
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+rule_files:
+  - "alert.rules.yml"
+
+scrape_configs:
+  # Spring Boot Actuator → Micrometer → Prometheus
+  - job_name: mado-backend
+    metrics_path: /actuator/prometheus
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["backend:8080"]
+    # Basic auth if you expose actuator with security (optional)
+    # basic_auth:
+    #   username: actuator
+    #   password: ${ACTUATOR_PASSWORD}

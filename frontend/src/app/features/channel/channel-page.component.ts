@@ -1,6 +1,6 @@
-import { DatePipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { VideoPlayerComponent } from '../../shared/components/video-player/video-player.component';
 import { ChatPanelComponent } from '../../shared/components/chat-panel/chat-panel.component';
@@ -13,11 +13,13 @@ import { ChatService } from '../../core/services/chat.service';
 import { HttpClient } from '@angular/common/http';
 import { Subscription } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
+import { loadStripe, Stripe, StripeCardElement } from '@stripe/stripe-js';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'mado-channel-page',
   standalone: true,
-  imports: [VideoPlayerComponent, ChatPanelComponent, ChannelEngagementComponent, DatePipe, FormsModule],
+  imports: [VideoPlayerComponent, ChatPanelComponent, ChannelEngagementComponent, DatePipe, FormsModule, DecimalPipe],
   template: `
     @if (channel) {
       <div class="layout" [class.theater]="theaterMode">
@@ -69,7 +71,7 @@ import { ToastrService } from 'ngx-toastr';
               }
               @if (!isOwner && auth.currentUser$.value) {
                 <button type="button" class="gift-subs" (click)="stubGift()">🎁 Gift</button>
-                <button type="button" class="subscribe" (click)="stubSub()">Subscribe</button>
+                <button type="button" class="subscribe" (click)="openSubModal()">Subscribe</button>
               }
             </div>
           </div>
@@ -90,9 +92,29 @@ import { ToastrService } from 'ngx-toastr';
             </div>
           }
 
+          <!-- Stats bar -->
+          @if (channelStats) {
+            <div class="stats-bar">
+              <span class="sbar-item">👁 {{ channelStats.totalViews | number }} views</span>
+              <span class="sbar-sep">·</span>
+              <span class="sbar-item">⏱ {{ channelStats.totalHours | number:'1.0-0' }}h streamed</span>
+              @if (channelRank) {
+                <span class="sbar-sep">·</span>
+                <span class="sbar-item">🏆 Rank #{{ channelRank }}</span>
+              }
+              @if (tierInfo) {
+                <span class="sbar-sep">·</span>
+                <span class="tier-badge-pill" [style.color]="tierInfo.badgeColor" [style.border-color]="tierInfo.badgeColor" title="{{ tierInfo.displayName }} streamer">
+                  {{ tierIcon(tierInfo.name) }} {{ tierInfo.displayName }}
+                </span>
+              }
+            </div>
+          }
+
           <div class="tabs">
             <button type="button" [class.on]="tab === 'watch'" (click)="tab = 'watch'">Watch</button>
             <button type="button" [class.on]="tab === 'videos'" (click)="tab = 'videos'; loadVods()">Videos</button>
+            <button type="button" [class.on]="tab === 'about'" (click)="tab = 'about'; loadAbout()">About</button>
           </div>
 
           @if (tab === 'watch') {
@@ -107,7 +129,7 @@ import { ToastrService } from 'ngx-toastr';
             @if (!theaterMode) {
               <mado-channel-engagement [username]="channel.username" [isOwner]="isOwner" />
             }
-          } @else {
+          } @else if (tab === 'videos') {
             <div class="vod-grid">
               @for (v of vods; track v.id) {
                 <a class="vod mado-card" [href]="v.vodUrl" target="_blank" rel="noopener">
@@ -122,12 +144,92 @@ import { ToastrService } from 'ngx-toastr';
                 <p class="muted full">No VODs published yet.</p>
               }
             </div>
+          } @else if (tab === 'about') {
+            <!-- Tier showcase -->
+            @if (tierInfo) {
+              <div class="about-tier mado-card" [style.border-color]="tierInfo.badgeColor">
+                <span class="at-icon" [style.color]="tierInfo.badgeColor">{{ tierIcon(tierInfo.name) }}</span>
+                <span class="at-name" [style.color]="tierInfo.badgeColor">{{ tierInfo.displayName }} Streamer</span>
+                <span class="at-split">{{ tierInfo.revenueSplit }}% revenue split</span>
+              </div>
+            }
+
+            <!-- Milestones showcase -->
+            @if (earnedMilestones.length) {
+              <div class="milestones-section">
+                <h3 class="section-head">Achievements</h3>
+                <div class="milestone-badges">
+                  @for (m of earnedMilestones.slice(0, showAllMilestones ? 999 : 8); track m.id) {
+                    <div class="ms-badge" [style.border-color]="m.milestone.badgeColor" title="{{ m.milestone.name }}: {{ m.milestone.description }}">
+                      <span class="ms-icon">🏆</span>
+                      <span class="ms-name">{{ m.milestone.name }}</span>
+                    </div>
+                  }
+                </div>
+                @if (!showAllMilestones && earnedMilestones.length > 8) {
+                  <button type="button" class="show-more-btn" (click)="showAllMilestones = true">
+                    View all {{ earnedMilestones.length }} achievements →
+                  </button>
+                }
+              </div>
+            }
+
+            <!-- Community Goals -->
+            @if (channelGoals.length) {
+              <div class="goals-section">
+                <h3 class="section-head">Community Goals</h3>
+                <p class="muted goals-hint">Help {{ channel.username }} reach their goals by following or subscribing!</p>
+                @for (g of channelGoals; track g.id) {
+                  <div class="goal-card mado-card">
+                    <div class="goal-head">
+                      <span class="goal-type-dot" [style.background]="goalTypeColor(g.goalType)"></span>
+                      <strong>{{ g.title }}</strong>
+                      @if (g.rewardText) {
+                        <span class="goal-reward-txt">🎁 {{ g.rewardText }}</span>
+                      }
+                    </div>
+                    <div class="goal-prog-label">
+                      <span>{{ g.currentValue | number }} / {{ g.targetValue | number }}</span>
+                      <span>{{ goalPct(g) }}%</span>
+                    </div>
+                    <div class="goal-track">
+                      <div class="goal-fill" [style.width]="goalPct(g) + '%'"></div>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
           }
         </section>
 
         <aside class="side">
-          <mado-chat-panel [channelId]="channel.id" />
+          <mado-chat-panel [channelId]="channel.id" [channelUsername]="channel.username" />
         </aside>
+      </div>
+    }
+
+    <!-- Subscribe modal -->
+    @if (subModalOpen && channel) {
+      <div class="modal-backdrop" (click)="closeSubModal()">
+        <div class="modal sub-modal" (click)="$event.stopPropagation()">
+          <div class="modal-head">Subscribe to {{ channel.username }}</div>
+          <div class="sub-tiers">
+            @for (t of subTiers; track t.tier) {
+              <div class="sub-tier" [class.selected]="selectedTier === t.tier" (click)="selectedTier = t.tier">
+                <div class="tier-name">{{ t.label }}</div>
+                <div class="tier-price">&#36;{{ t.price.toFixed(2) }}/mo</div>
+              </div>
+            }
+          </div>
+          <div id="sub-card-element" class="stripe-card-el"></div>
+          @if (subCardError) { <div class="card-error">{{ subCardError }}</div> }
+          <div class="modal-actions">
+            <button class="modal-cancel" (click)="closeSubModal()">Cancel</button>
+            <button class="modal-submit" (click)="confirmSub()" [disabled]="subPurchasing">
+              {{ subPurchasing ? 'Processing…' : 'Subscribe' }}
+            </button>
+          </div>
+        </div>
       </div>
     }
 
@@ -431,6 +533,71 @@ import { ToastrService } from 'ngx-toastr';
       font-family: inherit;
     }
     .modal-submit:disabled { opacity: .5; cursor: default; }
+    .sub-modal { min-width: 320px; }
+    .sub-tiers { display: flex; gap: .75rem; margin-bottom: 1rem; }
+    .sub-tier {
+      flex: 1; padding: .75rem; border: 2px solid var(--border); border-radius: 10px;
+      cursor: pointer; text-align: center; transition: border-color .15s;
+    }
+    .sub-tier:hover { border-color: var(--accent); }
+    .sub-tier.selected { border-color: var(--accent); background: rgba(83,252,24,.07); }
+    .tier-name { font-weight: 800; font-size: .9rem; }
+    .tier-price { color: var(--accent); font-size: .85rem; margin-top: .2rem; }
+    .stripe-card-el {
+      background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 6px;
+      padding: .75rem 1rem; margin-bottom: .75rem;
+    }
+    .card-error { color: #ff4444; font-size: .85rem; margin-bottom: .75rem; }
+
+    /* Stats bar */
+    .stats-bar {
+      display: flex; flex-wrap: wrap; gap: .5rem; align-items: center;
+      padding: .6rem 0; margin-bottom: .75rem; font-size: .88rem;
+    }
+    .sbar-item { color: var(--text-secondary); font-weight: 600; }
+    .sbar-sep  { color: var(--text-muted); }
+    .tier-badge-pill {
+      border: 1px solid; border-radius: 8px; padding: .15rem .55rem;
+      font-size: .78rem; font-weight: 800;
+    }
+
+    /* About tab */
+    .about-tier {
+      display: flex; align-items: center; gap: .75rem; padding: .85rem 1.1rem;
+      margin-bottom: 1rem; border-width: 2px;
+    }
+    .at-icon { font-size: 1.4rem; }
+    .at-name { font-weight: 800; font-size: 1rem; }
+    .at-split { color: var(--text-muted); font-size: .85rem; margin-left: auto; }
+
+    .section-head {
+      font-size: .8rem; font-weight: 800; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: .06em; margin: 0 0 .65rem;
+    }
+    .milestones-section, .goals-section { margin-bottom: 1.25rem; }
+    .milestone-badges { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .ms-badge {
+      display: flex; flex-direction: column; align-items: center; gap: .2rem;
+      border: 1.5px solid; border-radius: 10px; padding: .5rem .65rem;
+      min-width: 70px; text-align: center; cursor: default;
+      transition: transform .15s;
+    }
+    .ms-badge:hover { transform: translateY(-2px); }
+    .ms-icon { font-size: 1.2rem; }
+    .ms-name { font-size: .68rem; font-weight: 700; color: var(--text-secondary); }
+    .show-more-btn {
+      background: none; border: none; color: var(--accent); cursor: pointer;
+      font-family: inherit; font-size: .85rem; font-weight: 700; margin-top: .65rem; padding: 0;
+    }
+
+    .goals-hint { font-size: .85rem; color: var(--text-muted); margin: 0 0 .75rem; }
+    .goal-card { padding: .85rem 1rem; margin-bottom: .65rem; }
+    .goal-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .65rem; }
+    .goal-type-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .goal-reward-txt { font-size: .82rem; color: var(--text-muted); margin-left: auto; }
+    .goal-prog-label { display: flex; justify-content: space-between; font-size: .8rem; color: var(--text-muted); margin-bottom: .3rem; }
+    .goal-track { height: 7px; background: var(--bg-tertiary); border-radius: 999px; overflow: hidden; }
+    .goal-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width .4s; }
   `]
 })
 export class ChannelPageComponent implements OnInit, OnDestroy {
@@ -440,7 +607,7 @@ export class ChannelPageComponent implements OnInit, OnDestroy {
   isFollowing = false;
   canFollow = false;
   isOwner = false;
-  tab: 'watch' | 'videos' = 'watch';
+  tab: 'watch' | 'videos' | 'about' = 'watch';
   theaterMode = false;
   editingTitle = false;
   titleDraft = '';
@@ -450,10 +617,26 @@ export class ChannelPageComponent implements OnInit, OnDestroy {
   clipModalOpen = false;
   clipTitle = '';
   clipSaving = false;
+  // Incentive program data
+  channelStats: any = null;
+  channelRank: number | null = null;
+  tierInfo: any = null;
+  earnedMilestones: any[] = [];
+  channelGoals: any[] = [];
+  showAllMilestones = false;
+  subModalOpen = false;
+  selectedTier: 'TIER1' | 'TIER2' | 'TIER3' = 'TIER1';
+  subPurchasing = false;
+  subCardError = '';
+  subTiers: { tier: 'TIER1' | 'TIER2' | 'TIER3'; label: string; price: number }[] = [];
+  private stripe: Stripe | null = null;
+  private subCardElement: StripeCardElement | null = null;
+  private subClientSecret = '';
   private viewerSub?: Subscription;
 
   constructor(
     private readonly route: ActivatedRoute,
+    private readonly router: Router,
     private readonly streams: StreamService,
     readonly auth: AuthService,
     private readonly follows: FollowService,
@@ -463,12 +646,19 @@ export class ChannelPageComponent implements OnInit, OnDestroy {
     private readonly toastr: ToastrService
   ) {}
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
+    this.stripe = await loadStripe(environment.stripePublishableKey);
     const username = this.route.snapshot.paramMap.get('username') ?? '';
-    this.streams.getChannel(username).subscribe((ch) => {
+    this.streams.getChannel(username).subscribe({
+      next: (ch) => {
       this.channel = ch;
       this.hlsUrl = ch.hlsMasterUrl ?? '';
       this.displayViewers = ch.viewerCount;
+      this.subTiers = [
+        { tier: 'TIER1', label: 'Tier 1', price: ch.subPriceTier1 ?? 4.99 },
+        { tier: 'TIER2', label: 'Tier 2', price: ch.subPriceTier2 ?? 9.99 },
+        { tier: 'TIER3', label: 'Tier 3', price: ch.subPriceTier3 ?? 24.99 }
+      ];
       const me = this.auth.currentUser$.value;
       const token = this.auth.getAccessToken();
       this.isOwner = !!(me && ch.username === me.username);
@@ -483,6 +673,18 @@ export class ChannelPageComponent implements OnInit, OnDestroy {
       });
       this.engagement.schedules(username).subscribe((s) => (this.schedules = s ?? []));
       this.engagement.emotes(username).subscribe((e) => (this.emotes = e ?? []));
+      // Load incentive program data
+      this.http.get<any>(`/api/stats/channel/${username}?period=ALL_TIME`).subscribe({
+        next: (s) => (this.channelStats = s), error: () => {}
+      });
+      this.http.get<any>(`/api/rankings/channel/${username}`).subscribe({
+        next: (r) => (this.channelRank = r?.ranks?.DAILY_VIEWS ?? null), error: () => {}
+      });
+      this.http.get<any>(`/api/tiers/${username}`).subscribe({
+        next: (t) => (this.tierInfo = t), error: () => {}
+      });
+      },
+      error: () => this.router.navigate(['/not-found'])
     });
   }
 
@@ -529,33 +731,83 @@ export class ChannelPageComponent implements OnInit, OnDestroy {
   }
 
   createClip(): void {
-    if (!this.channel || !this.channel.currentStreamId || !this.clipTitle.trim()) return;
+    if (!this.channel || !this.clipTitle.trim()) return;
     this.clipSaving = true;
-    const body = {
-      streamId: this.channel.currentStreamId,
-      title: this.clipTitle.trim(),
-      clipUrl: this.hlsUrl || window.location.href,
-      thumbnailUrl: this.channel.thumbnailUrl ?? null
-    };
-    this.http.post('/api/clips', body).subscribe({
-      next: () => {
-        this.clipModalOpen = false;
-        this.clipSaving = false;
-        this.toastr.success('Clip created!');
-      },
-      error: () => {
-        this.clipSaving = false;
-        this.toastr.error('Could not create clip.');
-      }
-    });
+    this.http
+      .post('/api/clips/from-live-hls', {
+        channelUsername: this.channel.username,
+        title: this.clipTitle.trim()
+      })
+      .subscribe({
+        next: () => {
+          this.clipModalOpen = false;
+          this.clipSaving = false;
+          this.toastr.success('Clip created from the last 30 seconds of the stream.');
+          void this.router.navigate(['/clips']);
+        },
+        error: (err) => {
+          this.clipSaving = false;
+          this.toastr.error(err?.error?.message ?? 'Could not create clip.');
+        }
+      });
   }
 
   stubGift(): void {
     this.toastr.info('Gift subs coming soon!');
   }
 
-  stubSub(): void {
-    this.toastr.info('Channel subscriptions coming soon!');
+  openSubModal(): void {
+    if (!this.channel?.isSubscriptionEnabled) {
+      this.toastr.info('Subscriptions not enabled for this channel.');
+      return;
+    }
+    this.subModalOpen = true;
+    this.subCardError = '';
+    this.subClientSecret = '';
+    this.selectedTier = 'TIER1';
+    setTimeout(() => this.mountSubCard(), 50);
+    this.fetchSubIntent();
+  }
+
+  private fetchSubIntent(): void {
+    if (!this.channel) return;
+    this.http.post<{ clientSecret: string }>(`/api/subscriptions/${this.channel.id}`, { tier: this.selectedTier }).subscribe({
+      next: r => { this.subClientSecret = r.clientSecret; },
+      error: () => { this.subCardError = 'Failed to initialize payment.'; }
+    });
+  }
+
+  private mountSubCard(): void {
+    if (!this.stripe) return;
+    const elements = this.stripe.elements();
+    this.subCardElement = elements.create('card', {
+      style: { base: { color: '#e0e0e0', fontFamily: 'monospace', fontSize: '15px', '::placeholder': { color: '#666' } } }
+    });
+    const el = document.getElementById('sub-card-element');
+    if (el) this.subCardElement.mount(el);
+  }
+
+  async confirmSub(): Promise<void> {
+    if (!this.stripe || !this.subCardElement || !this.subClientSecret) return;
+    this.subPurchasing = true;
+    this.subCardError = '';
+    const result = await this.stripe.confirmCardPayment(this.subClientSecret, {
+      payment_method: { card: this.subCardElement }
+    });
+    this.subPurchasing = false;
+    if (result.error) {
+      this.subCardError = result.error.message ?? 'Payment failed';
+    } else if (result.paymentIntent?.status === 'succeeded') {
+      this.closeSubModal();
+      this.toastr.success(`Subscribed to ${this.channel?.username}!`);
+    }
+  }
+
+  closeSubModal(): void {
+    if (this.subCardElement) { this.subCardElement.unmount(); this.subCardElement = null; }
+    this.subModalOpen = false;
+    this.subClientSecret = '';
+    this.subCardError = '';
   }
 
   toggleFollow(): void {
@@ -566,6 +818,38 @@ export class ChannelPageComponent implements OnInit, OnDestroy {
     } else {
       this.follows.follow(id).subscribe(() => (this.isFollowing = true));
     }
+  }
+
+  loadAbout(): void {
+    if (!this.channel) return;
+    const username = this.channel.username;
+    if (!this.earnedMilestones.length) {
+      this.http.get<any[]>(`/api/milestones/${username}`).subscribe({
+        next: (m) => (this.earnedMilestones = m ?? []), error: () => {}
+      });
+    }
+    if (!this.channelGoals.length) {
+      this.http.get<any[]>(`/api/goals/${this.channel.id}`).subscribe({
+        next: (g) => (this.channelGoals = g ?? []), error: () => {}
+      });
+    }
+  }
+
+  tierIcon(name: string): string {
+    const m: Record<string, string> = { BRONZE:'🥉', SILVER:'🥈', GOLD:'🥇', DIAMOND:'💎', LEGEND:'👑' };
+    return m[name] ?? '🏅';
+  }
+
+  goalPct(g: any): number {
+    if (!g.targetValue) return 100;
+    return Math.min(100, Math.round((g.currentValue / g.targetValue) * 100));
+  }
+
+  goalTypeColor(type: string): string {
+    const m: Record<string, string> = {
+      FOLLOWERS:'#53fc18', SUBSCRIBERS:'#9c27b0', HOURS:'#ff9800', VIEWERS:'#2196f3', DONATIONS:'#ffd700'
+    };
+    return m[type] ?? '#607d8b';
   }
 
   fmt(n: number): string {

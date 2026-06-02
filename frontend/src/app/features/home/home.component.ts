@@ -2,13 +2,13 @@ import { Component, OnInit } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TimeoutError, finalize, forkJoin, timeout } from 'rxjs';
 import { StreamCardComponent } from '../../shared/components/stream-card/stream-card.component';
-import { SiteFooterComponent } from '../../shared/components/site-footer/site-footer.component';
 import { Category, LiveStream, StreamService } from '../../core/services/stream.service';
+import { HttpClient } from '@angular/common/http';
 
 @Component({
   selector: 'mado-home',
   standalone: true,
-  imports: [RouterLink, StreamCardComponent, SiteFooterComponent],
+  imports: [RouterLink, StreamCardComponent],
   template: `
     <div class="home">
 
@@ -118,6 +118,37 @@ import { Category, LiveStream, StreamService } from '../../core/services/stream.
           </section>
         }
 
+        <!-- 🚀 RISING STARS -->
+        @if (risingStars.length) {
+          <section class="section-wrap">
+            <div class="sec-head">
+              <h2 class="sec-title">🚀 Rising Stars</h2>
+              <a routerLink="/leaderboard" class="view-all">View leaderboard →</a>
+            </div>
+            <div class="h-scroll">
+              @for (r of risingStars; track r.channelId) {
+                <a [routerLink]="['/', r.username]" class="rising-card">
+                  <div class="rising-thumb">
+                    @if (r.thumbnailUrl) {
+                      <img [src]="r.thumbnailUrl" [alt]="r.username" loading="lazy" />
+                    } @else {
+                      <div class="rising-ph">{{ r.username.charAt(0).toUpperCase() }}</div>
+                    }
+                    @if (r.isLive) { <span class="r-live">LIVE</span> }
+                  </div>
+                  <div class="rising-info">
+                    <div class="rising-name">{{ r.username }}</div>
+                    <div class="rising-growth">↑ {{ r.metricValue }}% this week</div>
+                    @if (r.categoryName) {
+                      <div class="rising-cat">{{ r.categoryName }}</div>
+                    }
+                  </div>
+                </a>
+              }
+            </div>
+          </section>
+        }
+
         <!-- TOP CATEGORIES -->
         @if (categories.length) {
           <section class="section-wrap">
@@ -187,7 +218,6 @@ import { Category, LiveStream, StreamService } from '../../core/services/stream.
           </div>
         }
 
-        <mado-site-footer />
       }
     </div>
   `,
@@ -546,6 +576,29 @@ import { Category, LiveStream, StreamService } from '../../core/services/stream.
     .empty-wrap h2 { color: var(--text-primary); margin: 0 0 .5rem; }
     .empty-wrap p { margin: 0; font-size: .95rem; }
     .empty-wrap a { color: var(--accent); }
+
+    /* ─── RISING STARS ─── */
+    .rising-card {
+      flex: 0 0 160px; border-radius: 12px; overflow: hidden;
+      background: var(--bg-card); border: 1px solid var(--border);
+      text-decoration: none; color: inherit; transition: transform .15s, box-shadow .15s;
+    }
+    .rising-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+    .rising-thumb { position: relative; aspect-ratio: 16/9; overflow: hidden; }
+    .rising-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .rising-ph {
+      width: 100%; height: 100%; background: linear-gradient(135deg, #1a1d2e, #0d1117);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem; font-weight: 900; color: var(--accent);
+    }
+    .r-live {
+      position: absolute; top: 6px; left: 6px; background: #e53935; color: #fff;
+      font-size: .6rem; font-weight: 900; padding: .12rem .4rem; border-radius: 3px;
+    }
+    .rising-info { padding: .6rem .75rem; }
+    .rising-name { font-weight: 800; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rising-growth { color: #53fc18; font-weight: 700; font-size: .8rem; margin-top: .2rem; }
+    .rising-cat { color: var(--text-muted); font-size: .75rem; margin-top: .15rem; }
   `]
 })
 export class HomeComponent implements OnInit {
@@ -559,10 +612,14 @@ export class HomeComponent implements OnInit {
   moreLive: LiveStream[] = [];
   categories: Category[] = [];
   categorySections: { slug: string; name: string; streams: LiveStream[] }[] = [];
+  risingStars: any[] = [];
 
   private allLive: LiveStream[] = [];
 
-  constructor(private readonly streams: StreamService) {}
+  constructor(
+    private readonly streams: StreamService,
+    private readonly http: HttpClient
+  ) {}
 
   ngOnInit(): void {
     this.load();
@@ -588,6 +645,11 @@ export class HomeComponent implements OnInit {
           this.featuredStrip = this.allLive.slice(1, 7);
           this.categorySections = this.buildCategorySections(this.allLive);
           this.moreLive = this.computeMoreLive();
+          // Load rising stars
+          this.http.get<any[]>('/api/rankings/rising?page=0').subscribe({
+            next: (r) => (this.risingStars = (r ?? []).slice(0, 12)),
+            error: () => {}
+          });
         },
         error: (err: unknown) => {
           if (err instanceof TimeoutError) {

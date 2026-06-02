@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import { adminGuard } from './core/guards/admin.guard';
 import { streamerGuard } from './core/guards/streamer.guard';
 import { HomeComponent } from './features/home/home.component';
 
@@ -26,6 +27,11 @@ export const routes: Routes = [
     canActivate: [authGuard]
   },
   {
+    path: 'admin',
+    loadComponent: () => import('./features/admin/admin.component').then((m) => m.AdminComponent),
+    canActivate: [adminGuard]
+  },
+  {
     path: 'dashboard',
     loadComponent: () => import('./features/dashboard/dashboard.component').then((m) => m.DashboardComponent),
     canActivate: [streamerGuard]
@@ -38,6 +44,51 @@ export const routes: Routes = [
   {
     path: 'dashboard/moderation',
     loadComponent: () => import('./features/dashboard/moderation.component').then((m) => m.ModerationDashboardComponent),
+    canActivate: [streamerGuard]
+  },
+  {
+    path: 'dashboard/clips',
+    loadComponent: () => import('./features/dashboard/dashboard-clips.component').then((m) => m.DashboardClipsComponent),
+    canActivate: [streamerGuard]
+  },
+  {
+    path: 'dashboard/vods',
+    loadComponent: () => import('./features/dashboard/dashboard-vods.component').then((m) => m.DashboardVodsComponent),
+    canActivate: [streamerGuard]
+  },
+  {
+    path: 'dashboard/emotes',
+    loadComponent: () => import('./features/dashboard/dashboard-emotes.component').then((m) => m.DashboardEmotesComponent),
+    canActivate: [streamerGuard]
+  },
+  {
+    path: 'dashboard/channel-points',
+    loadComponent: () => import('./features/dashboard/dashboard-channel-points.component').then((m) => m.DashboardChannelPointsComponent),
+    canActivate: [streamerGuard]
+  },
+  {
+    path: 'dashboard/moderators',
+    loadComponent: () => import('./features/dashboard/dashboard-moderators.component').then((m) => m.DashboardModeratorsComponent),
+    canActivate: [streamerGuard]
+  },
+  {
+    path: 'dashboard/progress',
+    loadComponent: () => import('./features/dashboard/dashboard-progress.component').then((m) => m.DashboardProgressComponent),
+    canActivate: [streamerGuard]
+  },
+  {
+    path: 'dashboard/milestones',
+    loadComponent: () => import('./features/dashboard/dashboard-milestones.component').then((m) => m.DashboardMilestonesComponent),
+    canActivate: [streamerGuard]
+  },
+  {
+    path: 'dashboard/earnings',
+    loadComponent: () => import('./features/dashboard/dashboard-earnings.component').then((m) => m.DashboardEarningsComponent),
+    canActivate: [streamerGuard]
+  },
+  {
+    path: 'dashboard/goals',
+    loadComponent: () => import('./features/dashboard/dashboard-goals.component').then((m) => m.DashboardGoalsComponent),
     canActivate: [streamerGuard]
   },
   {

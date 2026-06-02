@@ -10,6 +10,7 @@ export interface User {
   avatarUrl?: string;
   role: 'VIEWER' | 'STREAMER' | 'MODERATOR' | 'ADMIN';
   isVerified: boolean;
+  twoFaEnabled?: boolean;
 }
 
 export interface AuthResponse {
@@ -32,8 +33,13 @@ export class AuthService {
     }
   }
 
-  login(email: string, password: string): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>(`${this.apiUrl}/login`, { email, password }).pipe(
+  login(identifier: string, password: string, totpCode?: string | null): Observable<AuthResponse> {
+    const body: { identifier: string; password: string; totpCode?: string } = { identifier, password };
+    const code = totpCode?.trim();
+    if (code) {
+      body.totpCode = code;
+    }
+    return this.http.post<AuthResponse>(`${this.apiUrl}/login`, body).pipe(
       tap((response) => this.setSession(response))
     );
   }

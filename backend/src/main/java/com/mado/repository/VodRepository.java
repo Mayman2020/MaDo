@@ -10,4 +10,8 @@ import java.util.UUID;
 public interface VodRepository extends JpaRepository<Vod, UUID> {
 
     Page<Vod> findByChannelIdAndIsPublicTrueOrderByCreatedAtDesc(UUID channelId, Pageable pageable);
+
+    Page<Vod> findByChannelIdOrderByCreatedAtDesc(UUID channelId, Pageable pageable);
+
+    boolean existsByStream_Id(UUID streamId);
 }

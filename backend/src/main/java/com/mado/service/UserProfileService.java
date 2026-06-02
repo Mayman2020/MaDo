@@ -6,6 +6,7 @@ import com.mado.entity.Role;
 import com.mado.entity.User;
 import com.mado.exception.BadRequestException;
 import com.mado.exception.NotFoundException;
+import com.mado.util.TextSanitizer;
 import com.mado.mapper.UserMapper;
 import com.mado.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -34,11 +35,33 @@ public class UserProfileService {
             throw new BadRequestException("Not allowed");
         }
         if (req.getDisplayName() != null) {
-            u.setDisplayName(req.getDisplayName());
+            u.setDisplayName(TextSanitizer.plainText(req.getDisplayName(), 50));
         }
         if (req.getBio() != null) {
-            u.setBio(req.getBio());
+            u.setBio(TextSanitizer.plainText(req.getBio(), 2000));
         }
+        return userMapper.toResponse(u);
+    }
+
+    @Transactional
+    public UserResponse updateAvatar(String username, String avatarUrl, User actor) {
+        User u = userRepository.findByUsername(username)
+                .orElseThrow(() -> new NotFoundException("User not found"));
+        if (!u.getId().equals(actor.getId()) && actor.getRole() != Role.ADMIN) {
+            throw new BadRequestException("Not allowed");
+        }
+        u.setAvatarUrl(avatarUrl);
+        return userMapper.toResponse(u);
+    }
+
+    @Transactional
+    public UserResponse updateBanner(String username, String bannerUrl, User actor) {
+        User u = userRepository.findByUsername(username)
+                .orElseThrow(() -> new NotFoundException("User not found"));
+        if (!u.getId().equals(actor.getId()) && actor.getRole() != Role.ADMIN) {
+            throw new BadRequestException("Not allowed");
+        }
+        u.setBannerUrl(bannerUrl);
         return userMapper.toResponse(u);
     }
 }

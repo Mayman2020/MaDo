@@ -1,0 +1,41 @@
+global:
+  # Gmail SMTP — substitute your credentials here or use env injection
+  smtp_smarthost:      smtp.gmail.com:587
+  smtp_from:           alerts@mado.live
+  smtp_auth_username:  "${MAIL_USERNAME}"
+  smtp_auth_password:  "${MAIL_PASSWORD}"
+  smtp_require_tls:    true
+  resolve_timeout:     5m
+
+route:
+  receiver:        email-alerts
+  group_by:        [alertname, severity]
+  group_wait:      30s
+  group_interval:  5m
+  repeat_interval: 4h
+
+  routes:
+    - match:
+        severity: critical
+      receiver: email-alerts
+      repeat_interval: 1h
+
+receivers:
+  - name: email-alerts
+    email_configs:
+      - to:           admin@mado.live
+        send_resolved: true
+        html: |
+          <b>{{ .Status | toUpper }}</b> — {{ .GroupLabels.alertname }}<br>
+          {{ range .Alerts }}
+          <b>Summary:</b> {{ .Annotations.summary }}<br>
+          <b>Detail:</b>  {{ .Annotations.description }}<br>
+          {{ end }}
+
+inhibit_rules:
+  # Suppress warnings when the backend is completely down
+  - source_match:
+      alertname: BackendDown
+    target_match_re:
+      alertname: '.+'
+    equal: [env]

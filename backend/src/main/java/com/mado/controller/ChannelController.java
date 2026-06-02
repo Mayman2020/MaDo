@@ -5,15 +5,19 @@ import com.mado.dto.ChannelStatsResponse;
 import com.mado.dto.ChannelUpdateRequest;
 import com.mado.dto.ChatSettingsRequest;
 import com.mado.dto.ChatSettingsResponse;
+import com.mado.dto.ClipResponse;
 import com.mado.dto.LiveStreamResponse;
+import com.mado.entity.User;
 import com.mado.security.CustomUserDetails;
 import com.mado.service.ChannelService;
+import com.mado.service.ClipService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -32,6 +36,7 @@ import java.util.Map;
 public class ChannelController {
 
     private final ChannelService channelService;
+    private final ClipService clipService;
 
     @GetMapping("/live")
     public ResponseEntity<Page<LiveStreamResponse>> live(
@@ -40,8 +45,14 @@ public class ChannelController {
     }
 
     @GetMapping("/{username}")
-    public ResponseEntity<ChannelPublicResponse> get(@PathVariable String username) {
-        return ResponseEntity.ok(channelService.getByUsername(username));
+    public ResponseEntity<ChannelPublicResponse> get(
+            @PathVariable String username,
+            Authentication authentication) {
+        User viewer = null;
+        if (authentication != null && authentication.getPrincipal() instanceof CustomUserDetails details) {
+            viewer = details.user();
+        }
+        return ResponseEntity.ok(channelService.getByUsername(username, viewer));
     }
 
     @PatchMapping("/{username}")
@@ -76,6 +87,13 @@ public class ChannelController {
             @Valid @RequestBody ChatSettingsRequest request,
             @AuthenticationPrincipal CustomUserDetails principal) {
         return ResponseEntity.ok(channelService.updateChatSettings(username, request, principal.user()));
+    }
+
+    @GetMapping("/{username}/clips")
+    public ResponseEntity<Page<ClipResponse>> clips(
+            @PathVariable String username,
+            @PageableDefault(size = 24) Pageable pageable) {
+        return ResponseEntity.ok(clipService.listByChannel(username, pageable));
     }
 
     @GetMapping("/leaderboard")

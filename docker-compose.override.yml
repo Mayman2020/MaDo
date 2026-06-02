@@ -1,0 +1,9 @@
+# Local port conflict override — maps backend to 8081 instead of 8080
+# (Oracle TNS listener occupies 8080 on this machine)
+services:
+  backend:
+    ports:
+      - "8081:8080"
+  frontend:
+    ports:
+      - "4201:80"

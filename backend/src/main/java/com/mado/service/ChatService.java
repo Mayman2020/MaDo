@@ -17,6 +17,8 @@ import com.mado.repository.FollowRepository;
 import com.mado.repository.ModeratorRepository;
 import com.mado.repository.StreamRepository;
 import com.mado.repository.SubscriptionRepository;
+import com.mado.security.ChatRateLimiter;
+import com.mado.util.TextSanitizer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -44,9 +46,18 @@ public class ChatService {
     private final SubscriptionRepository subscriptionRepository;
     private final ModeratorRepository moderatorRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final ChatRateLimiter chatRateLimiter;
 
     @Transactional
     public ChatMessageResponse send(UUID channelId, ChatSendRequest req, User author) {
+        if (!chatRateLimiter.tryAcquire(channelId, author.getId())) {
+            throw new BadRequestException("You are sending messages too quickly (max 1 per second)");
+        }
+        String content = TextSanitizer.chatMessage(req.getContent());
+        if (content.isBlank()) {
+            throw new BadRequestException("Message cannot be empty");
+        }
+
         Channel ch = channelRepository.findById(channelId)
                 .orElseThrow(() -> new NotFoundException("Channel not found"));
 
@@ -60,7 +71,7 @@ public class ChatService {
             assertChatModes(ch, author);
         }
 
-        assertNotBannedWord(ch.getId(), req.getContent());
+        assertNotBannedWord(ch.getId(), content);
 
         List<String> badges = buildBadges(ch, author, isOwner, isMod);
 
@@ -70,7 +81,7 @@ public class ChatService {
                 .channel(ch)
                 .user(author)
                 .stream(stream)
-                .content(req.getContent())
+                .content(content)
                 .color("#53fc18")
                 .badges(badges.isEmpty() ? null : badges.toArray(new String[0]))
                 .build();
@@ -178,11 +189,15 @@ public class ChatService {
     private ChatMessageResponse toDto(ChatMessage m) {
         User u = m.getUser();
         List<String> badges = m.getBadges() != null ? List.of(m.getBadges()) : List.of();
+        String username = u != null ? TextSanitizer.plainText(u.getUsername(), 40) : "system";
+        String displayName = u != null && u.getDisplayName() != null
+                ? TextSanitizer.plainText(u.getDisplayName(), 60)
+                : (u != null ? username : "System");
         return ChatMessageResponse.builder()
                 .id(m.getId())
-                .username(u != null ? u.getUsername() : "system")
-                .displayName(u != null && u.getDisplayName() != null ? u.getDisplayName() : (u != null ? u.getUsername() : "System"))
-                .content(m.getContent())
+                .username(username)
+                .displayName(displayName)
+                .content(TextSanitizer.plainText(m.getContent(), 500))
                 .createdAt(m.getCreatedAt())
                 .color(m.getColor())
                 .badges(badges)

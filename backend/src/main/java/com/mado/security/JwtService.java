@@ -1,9 +1,7 @@
 package com.mado.security;
 
 import com.mado.config.JwtProperties;
-import com.mado.entity.RefreshToken;
 import com.mado.entity.User;
-import com.mado.repository.RefreshTokenRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
@@ -17,6 +15,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.nio.charset.StandardCharsets;
 
 @Service
@@ -24,7 +23,6 @@ import java.nio.charset.StandardCharsets;
 public class JwtService {
 
     private final JwtProperties jwtProperties;
-    private final RefreshTokenRepository refreshTokenRepository;
 
     public String generateAccessToken(UserDetails userDetails) {
         User user = ((CustomUserDetails) userDetails).user();
@@ -38,14 +36,11 @@ public class JwtService {
 
     public String generateRefreshToken(UserDetails userDetails) {
         User user = ((CustomUserDetails) userDetails).user();
-        String token = buildToken(Map.of("userId", user.getId()), userDetails, jwtProperties.getRefreshTokenExpiry());
-        RefreshToken refreshToken = RefreshToken.builder()
-                .user(user)
-                .token(token)
-                .expiresAt(Instant.now().plusMillis(jwtProperties.getRefreshTokenExpiry()))
-                .build();
-        refreshTokenRepository.save(refreshToken);
-        return token;
+        return buildToken(
+                Map.of("userId", user.getId(), "nonce", UUID.randomUUID().toString()),
+                userDetails,
+                jwtProperties.getRefreshTokenExpiry()
+        );
     }
 
     public boolean validateToken(String token, UserDetails userDetails) {
@@ -85,7 +80,7 @@ public class JwtService {
         byte[] keyBytes;
         try {
             keyBytes = Decoders.BASE64.decode(jwtProperties.getSecret());
-        } catch (IllegalArgumentException ex) {
+        } catch (RuntimeException ex) {
             keyBytes = jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8);
         }
         return Keys.hmacShaKeyFor(keyBytes);

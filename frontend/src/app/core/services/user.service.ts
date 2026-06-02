@@ -10,6 +10,7 @@ export interface UserPublicDto {
   email?: string;
   displayName: string | null;
   avatarUrl: string | null;
+  bannerUrl: string | null;
   bio: string | null;
   role: User['role'];
   isVerified: boolean | null;
@@ -50,5 +51,17 @@ export class UserService {
 
   patchProfile(username: string, body: { displayName?: string; bio?: string }): Observable<UserPublicDto> {
     return this.http.patch<UserPublicDto>(`/api/users/${encodeURIComponent(username)}`, body);
+  }
+
+  uploadAvatar(username: string, file: File): Observable<UserPublicDto> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<UserPublicDto>(`/api/users/${encodeURIComponent(username)}/avatar`, form);
+  }
+
+  uploadBanner(username: string, file: File): Observable<UserPublicDto> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<UserPublicDto>(`/api/users/${encodeURIComponent(username)}/banner`, form);
   }
 }

@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command \"Get-Process -Id 5528 | Select-Object Name, Id, Path\")",
+      "Bash(docker --context default compose up -d backend)",
+      "Bash(docker --context default compose logs --tail=40 backend)",
+      "Bash(docker --context default compose up -d --build backend)",
+      "Bash(docker --context default compose logs --tail=30 backend)",
+      "Bash(docker --context default compose logs backend)",
+      "Bash(docker --context default compose up -d nginx-rtmp)",
+      "Bash(curl -s http://localhost:8088/stat)",
+      "Bash(ffmpeg -version)",
+      "Bash(docker --context default exec kicklive-nginx-rtmp-1 ffmpeg -version)",
+      "Bash(docker --context default logs kicklive-nginx-rtmp-1)",
+      "Bash(docker --context default exec kicklive-nginx-rtmp-1 cat /etc/nginx/nginx.conf)"
+    ]
+  }
+}

@@ -1,7 +1,7 @@
-import { DatePipe } from '@angular/common';
-import { Component, OnInit } from '@angular/core';
+import { DatePipe, DecimalPipe } from '@angular/common';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { RouterLink, RouterLinkActive } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { ToastrService } from 'ngx-toastr';
 import { AuthService } from '../../core/services/auth.service';
@@ -21,19 +21,100 @@ interface ChatSettings {
   minAccountAgeDays: number;
 }
 
+interface DashboardStats {
+  isLive: boolean;
+  viewerCount: number;
+  followerCount: number;
+  subscriberCount: number;
+  totalViews: number;
+}
+
+interface StreamHealth {
+  publishing: boolean;
+  streamName?: string | null;
+  bitrateKbps?: number | null;
+  fps?: number | null;
+  droppedFrames?: number | null;
+  width?: number | null;
+  height?: number | null;
+  activeSubscribers?: number | null;
+  rawMessage?: string | null;
+}
+
 @Component({
   selector: 'mado-dashboard',
   standalone: true,
-  imports: [RouterLink, FormsModule, DatePipe],
+  imports: [RouterLink, RouterLinkActive, FormsModule, DatePipe, DecimalPipe],
   template: `
     <div class="page">
       <h1 class="mado-heading">Streamer dashboard</h1>
       <p class="lead">OBS / FFmpeg ingest and stream keys</p>
 
+      <!-- Stats bar -->
+      @if (stats) {
+        <div class="stats-bar">
+          <div class="stat-item" [class.live]="stats.isLive">
+            <span class="stat-val">{{ stats.isLive ? 'LIVE' : 'OFFLINE' }}</span>
+            <span class="stat-label">Status</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-val">{{ stats.viewerCount | number }}</span>
+            <span class="stat-label">Viewers</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-val">{{ stats.followerCount | number }}</span>
+            <span class="stat-label">Followers</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-val">{{ stats.subscriberCount | number }}</span>
+            <span class="stat-label">Subscribers</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-val">{{ stats.totalViews | number }}</span>
+            <span class="stat-label">Total Views</span>
+          </div>
+        </div>
+      }
+
+      <section class="mado-card block health-card">
+        <h2>Stream health</h2>
+        <p class="hint">Ingest stats from nginx-rtmp (updates while you are live).</p>
+        @if (streamHealth) {
+          @if (streamHealth.publishing) {
+            <ul class="health-list">
+              <li><span class="hk">Bitrate</span> <span class="hv">{{ streamHealth.bitrateKbps ?? 0 }} kbps</span></li>
+              <li><span class="hk">FPS</span> <span class="hv">{{ streamHealth.fps != null ? (streamHealth.fps | number:'1.0-2') : '—' }}</span></li>
+              <li><span class="hk">Dropped frames</span> <span class="hv">{{ streamHealth.droppedFrames ?? 0 }}</span></li>
+              @if (streamHealth.width && streamHealth.height) {
+                <li><span class="hk">Resolution</span> <span class="hv">{{ streamHealth.width }}×{{ streamHealth.height }}</span></li>
+              }
+              @if (streamHealth.activeSubscribers != null) {
+                <li><span class="hk">RTMP clients</span> <span class="hv">{{ streamHealth.activeSubscribers }}</span></li>
+              }
+            </ul>
+          } @else {
+            <p class="muted">
+              {{ streamHealth.rawMessage || 'No active publish detected on RTMP stat.' }}
+            </p>
+          }
+        } @else {
+          <p class="muted">Loading health…</p>
+        }
+      </section>
+
       <nav class="subnav">
-        <a routerLink="/dashboard/analytics">Analytics</a>
-        <a routerLink="/dashboard/moderation">Moderation</a>
-        <a routerLink="/subscriptions">Subscriptions</a>
+        <a routerLink="/dashboard" [routerLinkActiveOptions]="{exact:true}" routerLinkActive="active">Stream</a>
+        <a routerLink="/dashboard/analytics" routerLinkActive="active">Analytics</a>
+        <a routerLink="/dashboard/clips" routerLinkActive="active">Clips</a>
+        <a routerLink="/dashboard/vods" routerLinkActive="active">VODs</a>
+        <a routerLink="/dashboard/emotes" routerLinkActive="active">Emotes</a>
+        <a routerLink="/dashboard/channel-points" routerLinkActive="active">Channel Points</a>
+        <a routerLink="/dashboard/moderators" routerLinkActive="active">Moderators</a>
+        <a routerLink="/dashboard/moderation" routerLinkActive="active">Bans</a>
+        <a routerLink="/dashboard/progress" routerLinkActive="active">Tier & Progress</a>
+        <a routerLink="/dashboard/milestones" routerLinkActive="active">Milestones</a>
+        <a routerLink="/dashboard/earnings" routerLinkActive="active">Earnings</a>
+        <a routerLink="/dashboard/goals" routerLinkActive="active">Goals</a>
       </nav>
 
       @if (channel) {
@@ -173,6 +254,22 @@ interface ChatSettings {
             <p class="hint">Loading…</p>
           }
         </section>
+        <!-- Activity feed -->
+        <section class="mado-card block">
+          <h2>Activity Feed</h2>
+          <ul class="feed">
+            @for (n of activityFeed; track n.id) {
+              <li class="feed-item">
+                <span class="feed-type {{ n.type?.toLowerCase() }}">{{ feedIcon(n.type) }}</span>
+                <span class="feed-text">{{ n.message }}</span>
+                <span class="feed-time">{{ n.createdAt | date:'shortTime' }}</span>
+              </li>
+            } @empty {
+              <li class="muted">No recent activity</li>
+            }
+          </ul>
+        </section>
+
       } @else {
         <p>Loading channel…</p>
       }
@@ -231,10 +328,34 @@ interface ChatSettings {
     .cs-field-row { display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; }
     .cs-field-label { font-weight: 700; font-size: .88rem; min-width: 170px; }
     .cs-num { width: 80px; text-align: center; }
+    .stats-bar {
+      display: flex; gap: 1rem; flex-wrap: wrap;
+      background: var(--bg-card); border-radius: 12px; padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .stat-item { display: flex; flex-direction: column; align-items: center; min-width: 80px; flex: 1; }
+    .stat-val { font-size: 1.5rem; font-weight: 800; color: var(--text-primary); }
+    .stat-val { color: var(--text-primary); }
+    .stat-item.live .stat-val { color: var(--danger); }
+    .stat-label { font-size: .75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+    .health-card .health-list { list-style: none; padding: 0; margin: .5rem 0 0; display: grid; gap: .4rem; }
+    .health-card .health-list li { display: flex; justify-content: space-between; gap: 1rem; font-size: .9rem; }
+    .hk { color: var(--text-muted); }
+    .hv { font-weight: 700; font-family: "JetBrains Mono", monospace; }
+    .subnav a.active { color: var(--text-primary); border-bottom: 2px solid var(--accent); padding-bottom: 2px; }
+    .feed { list-style: none; padding: 0; margin: 0; max-height: 300px; overflow-y: auto; }
+    .feed-item { display: flex; align-items: baseline; gap: .5rem; padding: .4rem 0; border-bottom: 1px solid var(--border); font-size: .875rem; }
+    .feed-type { font-size: 1rem; min-width: 1.5rem; }
+    .feed-text { flex: 1; color: var(--text-secondary); }
+    .feed-time { color: var(--text-muted); font-size: .75rem; }
   `]
 })
-export class DashboardComponent implements OnInit {
+export class DashboardComponent implements OnInit, OnDestroy {
   channel: ChannelPublic | null = null;
+  stats: DashboardStats | null = null;
+  streamHealth: StreamHealth | null = null;
+  private healthPoll: ReturnType<typeof setInterval> | null = null;
+  activityFeed: any[] = [];
   resetMessage = '';
   rtmpUrl = environment.rtmpIngestUrl;
 
@@ -265,15 +386,49 @@ export class DashboardComponent implements OnInit {
 
   ngOnInit(): void {
     const u = this.auth.currentUser$.value;
-    if (!u) {
-      return;
-    }
+    if (!u) return;
     this.streams.getChannel(u.username).subscribe((ch) => {
       this.channel = ch;
       this.reloadSchedulesEmotes(u.username);
       this.loadChatSettings(u.username);
     });
     this.streams.getCategories(0, 100).subscribe((p) => (this.categories = p.content ?? []));
+    this.http.get<DashboardStats>('/api/dashboard/stats').subscribe({
+      next: (s) => (this.stats = s),
+      error: () => {}
+    });
+    this.http.get<{ content: any[] }>('/api/dashboard/activity-feed?page=0').subscribe({
+      next: (p) => (this.activityFeed = p.content ?? []),
+      error: () => {}
+    });
+    this.loadStreamHealth();
+    this.healthPoll = setInterval(() => this.loadStreamHealth(), 8000);
+  }
+
+  ngOnDestroy(): void {
+    if (this.healthPoll) {
+      clearInterval(this.healthPoll);
+      this.healthPoll = null;
+    }
+  }
+
+  private loadStreamHealth(): void {
+    this.http.get<StreamHealth>('/api/dashboard/stream-health').subscribe({
+      next: (h) => (this.streamHealth = h),
+      error: () => {}
+    });
+  }
+
+  feedIcon(type: string | null): string {
+    switch (type) {
+      case 'FOLLOW': return '🟢';
+      case 'SUB': case 'SUBSCRIPTION': return '⭐';
+      case 'GIFT_SUB': return '🎁';
+      case 'DONATION': return '💰';
+      case 'RAID': case 'RAID_INCOMING': return '⚔️';
+      case 'CHANNEL_POINT': return '🎯';
+      default: return '🔔';
+    }
   }
 
   loadChatSettings(username: string): void {

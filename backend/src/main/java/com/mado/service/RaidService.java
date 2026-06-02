@@ -7,9 +7,11 @@ import com.mado.exception.BadRequestException;
 import com.mado.repository.RaidRepository;
 import com.mado.security.ChannelAuthorizationHelper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -18,6 +20,8 @@ public class RaidService {
 
     private final RaidRepository raidRepository;
     private final ChannelAuthorizationHelper channelAuth;
+    private final SimpMessagingTemplate messaging;
+    private final NotificationService notificationService;
 
     @Transactional
     public Raid start(String fromChannelUsername, String targetChannelUsername, int viewerCount, User actor) {
@@ -33,7 +37,16 @@ public class RaidService {
                 .viewerCount(viewerCount)
                 .status("PENDING")
                 .build();
-        return raidRepository.save(raid);
+        Raid saved = raidRepository.save(raid);
+        // Notify target channel owner
+        notificationService.create(target.getUser().getId(), "RAID", "Incoming Raid!",
+                from.getUser().getUsername() + " is raiding you with " + viewerCount + " viewers!");
+        // Broadcast STOMP event to target channel
+        messaging.convertAndSend("/topic/channel." + target.getId() + ".raid",
+                Map.of("raidId", saved.getId().toString(),
+                        "fromUsername", from.getUser().getUsername(),
+                        "viewerCount", viewerCount));
+        return saved;
     }
 
     @Transactional

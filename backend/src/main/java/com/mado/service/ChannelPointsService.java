@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -47,6 +48,34 @@ public class ChannelPointsService {
         channelAuth.requireOwnerOrModerator(ch, actor);
         body.setChannel(ch);
         return rewardRepository.save(body);
+    }
+
+    @Transactional
+    public ChannelPointReward updateReward(String channelUsername, UUID rewardId, Map<String, Object> body, User actor) {
+        Channel ch = channelAuth.channelByUsername(channelUsername);
+        channelAuth.requireOwnerOrModerator(ch, actor);
+        ChannelPointReward reward = rewardRepository.findById(rewardId)
+                .orElseThrow(() -> new NotFoundException("Reward not found"));
+        if (!reward.getChannel().getId().equals(ch.getId())) {
+            throw new BadRequestException("Reward does not belong to this channel");
+        }
+        if (body.containsKey("title")) reward.setTitle((String) body.get("title"));
+        if (body.containsKey("cost")) reward.setCost(Integer.valueOf(body.get("cost").toString()));
+        if (body.containsKey("isEnabled")) reward.setIsEnabled((Boolean) body.get("isEnabled"));
+        if (body.containsKey("description")) reward.setDescription((String) body.get("description"));
+        return rewardRepository.save(reward);
+    }
+
+    @Transactional
+    public void deleteReward(String channelUsername, UUID rewardId, User actor) {
+        Channel ch = channelAuth.channelByUsername(channelUsername);
+        channelAuth.requireOwnerOrModerator(ch, actor);
+        ChannelPointReward reward = rewardRepository.findById(rewardId)
+                .orElseThrow(() -> new NotFoundException("Reward not found"));
+        if (!reward.getChannel().getId().equals(ch.getId())) {
+            throw new BadRequestException("Reward does not belong to this channel");
+        }
+        rewardRepository.delete(reward);
     }
 
     @Transactional

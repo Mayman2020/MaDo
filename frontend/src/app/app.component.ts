@@ -1,18 +1,19 @@
 import { AsyncPipe } from '@angular/common';
 import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { filter, Subscription, switchMap, of, forkJoin, map, catchError, distinctUntilChanged, timeout } from 'rxjs';
+import { filter, Subscription, switchMap, of, forkJoin, map, catchError, distinctUntilChanged, timeout, Subject, debounceTime } from 'rxjs';
 import { AuthService } from './core/services/auth.service';
 import { FollowService } from './core/services/follow.service';
 import { LiveStream, StreamService } from './core/services/stream.service';
+import { SiteFooterComponent } from './shared/components/site-footer/site-footer.component';
 
 @Component({
   selector: 'mado-root',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, AsyncPipe],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, AsyncPipe, SiteFooterComponent],
   template: `
     <div class="shell">
-      <aside class="sidebar">
+      <aside class="sidebar" [class.open]="sidebarOpen">
         <a routerLink="/" class="logo mado-heading">MaDo Live</a>
         <nav class="primary">
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"><span class="nav-ic" aria-hidden="true">⌂</span> Home</a>
@@ -26,6 +27,11 @@ import { LiveStream, StreamService } from './core/services/stream.service';
           <a routerLink="/clips" routerLinkActive="active">Clips</a>
           @if (auth.isStreamer$ | async) {
             <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
+          }
+          @if (auth.currentUser$ | async; as navUser) {
+            @if (navUser.role === 'ADMIN') {
+              <a routerLink="/admin" routerLinkActive="active">Admin</a>
+            }
           }
           @if (auth.isLoggedIn$ | async) {
             <a routerLink="/settings/profile" routerLinkActive="active">Settings</a>
@@ -87,17 +93,35 @@ import { LiveStream, StreamService } from './core/services/stream.service';
         }
       </aside>
 
+      @if (sidebarOpen) {
+        <div class="backdrop" (click)="sidebarOpen = false"></div>
+      }
+
       <div class="main-col">
         <header class="topbar">
-          <div class="search-center">
+          <button class="hamburger" (click)="sidebarOpen = !sidebarOpen" aria-label="Toggle menu">☰</button>
+          <div class="search-center" #searchContainer>
             <span class="search-ic" aria-hidden="true">⌕</span>
             <input
               #q
               type="search"
               class="search-pill"
-              placeholder="Search"
-              (keydown.enter)="goSearch(q.value)"
+              placeholder="Search channels, games…"
+              (keydown.enter)="goSearch(q.value); showDropdown = false"
+              (input)="onSearchInput(q.value)"
+              (focus)="showDropdown = searchResults.length > 0"
+              autocomplete="off"
             />
+            @if (showDropdown && searchResults.length > 0) {
+              <div class="search-dropdown">
+                @for (r of searchResults; track r.label) {
+                  <a class="search-result" [routerLink]="r.route" (click)="showDropdown = false; q.value = ''">
+                    <span class="sr-type">{{ r.type }}</span>
+                    <span class="sr-label">{{ r.label }}</span>
+                  </a>
+                }
+              </div>
+            }
           </div>
           <div class="top-actions">
             <a routerLink="/wallet" class="wallet-btn">Get coins</a>
@@ -136,6 +160,7 @@ import { LiveStream, StreamService } from './core/services/stream.service';
         <main>
           <router-outlet />
         </main>
+        <mado-site-footer />
       </div>
     </div>
   `,
@@ -305,6 +330,22 @@ import { LiveStream, StreamService } from './core/services/stream.service';
       outline: none;
     }
     .search-pill::placeholder { color: var(--text-muted); }
+    .search-dropdown {
+      position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 100;
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.5); overflow: hidden;
+    }
+    .search-result {
+      display: flex; align-items: center; gap: .6rem; padding: .55rem 1rem;
+      text-decoration: none; color: var(--text-primary); font-size: .9rem;
+    }
+    .search-result:hover { background: var(--bg-hover); }
+    .sr-type {
+      font-size: .65rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase;
+      color: var(--accent); background: rgba(83,252,24,.1); padding: .1rem .35rem; border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .sr-label { font-weight: 600; }
     .top-actions {
       margin-left: auto;
       display: flex;
@@ -392,14 +433,31 @@ import { LiveStream, StreamService } from './core/services/stream.service';
       display: flex;
       flex-direction: column;
     }
+    .hamburger { display: none; }
+    .backdrop { display: none; }
     @media (max-width: 900px) {
       .search-center { position: relative; left: auto; transform: none; width: 100%; max-width: none; }
       .topbar { flex-wrap: wrap; justify-content: flex-end; }
     }
-    @media (max-width: 720px) {
-      .shell { flex-direction: column; }
-      .sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
-      .side-section { width: 100%; }
+    @media (max-width: 768px) {
+      .hamburger {
+        display: flex; align-items: center; justify-content: center;
+        background: none; border: none; color: var(--text-primary); font-size: 1.4rem;
+        cursor: pointer; padding: .35rem; order: -1;
+      }
+      .sidebar {
+        position: fixed; top: 0; left: 0; height: 100vh; z-index: 300;
+        transform: translateX(-100%); transition: transform .25s ease;
+        overflow-y: auto;
+      }
+      .sidebar.open { transform: translateX(0); }
+      .backdrop {
+        display: block; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 299;
+      }
+    }
+    @media (max-width: 480px) {
+      .search-center { width: 100%; order: 2; }
+      .topbar { gap: .5rem; }
     }
   `]
 })
@@ -410,18 +468,42 @@ export class AppComponent implements OnInit, OnDestroy {
   private readonly streams = inject(StreamService);
 
   @ViewChild('userRoot') userRoot?: ElementRef<HTMLElement>;
+  @ViewChild('searchContainer') searchContainer?: ElementRef<HTMLElement>;
 
   liveFollowing: LiveStream[] = [];
   recommended: LiveStream[] = [];
   followingExpanded = false;
   recommendedExpanded = false;
   menuOpen = false;
+  sidebarOpen = false;
+  showDropdown = false;
+  searchResults: { label: string; type: string; route: string[] }[] = [];
 
   private navSub?: Subscription;
+  private searchSub?: Subscription;
+  private readonly searchInput$ = new Subject<string>();
 
   ngOnInit(): void {
     this.navSub = this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => {
       this.menuOpen = false;
+      this.showDropdown = false;
+      this.sidebarOpen = false;
+    });
+
+    this.searchSub = this.searchInput$.pipe(
+      debounceTime(250),
+      distinctUntilChanged(),
+      switchMap(q => {
+        if (q.length < 2) { this.searchResults = []; this.showDropdown = false; return of(null); }
+        return this.streams.search(q).pipe(catchError(() => of(null)));
+      })
+    ).subscribe(res => {
+      if (!res) return;
+      const results: { label: string; type: string; route: string[] }[] = [];
+      (res.channels ?? []).slice(0, 4).forEach(c => results.push({ label: c.username, type: 'channel', route: ['/', c.username] }));
+      (res.categories ?? []).slice(0, 3).forEach(c => results.push({ label: c.name, type: 'game', route: ['/browse', c.slug] }));
+      this.searchResults = results;
+      this.showDropdown = results.length > 0;
     });
 
     this.auth.isLoggedIn$
@@ -458,15 +540,24 @@ export class AppComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.navSub?.unsubscribe();
+    this.searchSub?.unsubscribe();
+  }
+
+  onSearchInput(value: string): void {
+    this.searchInput$.next(value.trim());
   }
 
   @HostListener('document:click', ['$event'])
   onDoc(ev: MouseEvent): void {
     const t = ev.target as Node | null;
+    if (this.searchContainer?.nativeElement && t && this.searchContainer.nativeElement.contains(t)) {
+      return;
+    }
     if (this.userRoot?.nativeElement && t && this.userRoot.nativeElement.contains(t)) {
       return;
     }
     this.menuOpen = false;
+    this.showDropdown = false;
   }
 
   toggleMenu(ev: MouseEvent): void {

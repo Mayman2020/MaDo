@@ -44,6 +44,7 @@ public class FollowService {
                 .build();
         followRepository.save(f);
         ch.setFollowerCount((ch.getFollowerCount() == null ? 0 : ch.getFollowerCount()) + 1);
+        channelRepository.save(ch);
     }
 
     @Transactional
@@ -55,6 +56,7 @@ public class FollowService {
         if (ch.getFollowerCount() != null && ch.getFollowerCount() > 0) {
             ch.setFollowerCount(ch.getFollowerCount() - 1);
         }
+        channelRepository.save(ch);
     }
 
     @Transactional(readOnly = true)

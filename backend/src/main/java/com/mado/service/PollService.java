@@ -11,12 +11,15 @@ import com.mado.repository.PollOptionRepository;
 import com.mado.repository.PollRepository;
 import com.mado.security.ChannelAuthorizationHelper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +28,7 @@ public class PollService {
     private final PollRepository pollRepository;
     private final PollOptionRepository pollOptionRepository;
     private final ChannelAuthorizationHelper channelAuth;
+    private final SimpMessagingTemplate messaging;
 
     @Transactional(readOnly = true)
     public List<Poll> active(String channelUsername) {
@@ -48,7 +52,9 @@ public class PollService {
             PollOption o = PollOption.builder().poll(poll).title(t).voteCount(0).build();
             poll.getOptions().add(o);
         }
-        return pollRepository.save(poll);
+        Poll saved = pollRepository.save(poll);
+        broadcast(ch.getId(), saved);
+        return saved;
     }
 
     @Transactional
@@ -68,7 +74,8 @@ public class PollService {
         opt.incrementVotes();
         poll.setTotalVotes((poll.getTotalVotes() == null ? 0 : poll.getTotalVotes()) + 1);
         pollOptionRepository.save(opt);
-        pollRepository.save(poll);
+        Poll saved = pollRepository.save(poll);
+        broadcast(ch.getId(), saved);
     }
 
     @Transactional
@@ -81,6 +88,19 @@ public class PollService {
         }
         poll.setStatus("ENDED");
         poll.setEndedAt(Instant.now());
-        pollRepository.save(poll);
+        Poll saved = pollRepository.save(poll);
+        broadcast(ch.getId(), saved);
+    }
+
+    private void broadcast(UUID channelId, Poll poll) {
+        var options = poll.getOptions().stream()
+                .map(o -> Map.of("id", o.getId().toString(), "title", o.getTitle(), "voteCount", o.getVoteCount()))
+                .collect(Collectors.toList());
+        messaging.convertAndSend("/topic/channel." + channelId + ".polls",
+                Map.of("id", poll.getId().toString(),
+                        "title", poll.getTitle(),
+                        "status", poll.getStatus(),
+                        "totalVotes", poll.getTotalVotes(),
+                        "options", options));
     }
 }

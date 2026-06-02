@@ -1,0 +1,91 @@
+groups:
+  - name: mado-platform
+    interval: 30s
+    rules:
+
+      # ── Backend availability ────────────────────────────────────
+      - alert: BackendDown
+        expr: up{job="mado-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Spring Boot backend is unreachable"
+          description: "Prometheus cannot scrape the backend for more than 2 minutes."
+
+      # ── Redis connectivity ──────────────────────────────────────
+      # Requires a custom gauge exported by the backend health indicator.
+      # Add RedisHealthIndicator (Spring Actuator) + expose via /actuator/prometheus.
+      - alert: RedisDown
+        expr: |
+          sum(spring_data_redis_connected{job="mado-backend"} or
+              absent(spring_data_redis_connected{job="mado-backend"})) == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis connection lost"
+          description: "Backend cannot reach Redis — rate limiting and session caching are degraded."
+
+      # ── HTTP 5xx error rate > 5 % ───────────────────────────────
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_server_requests_seconds_count{status=~"5..",job="mado-backend"}[5m]))
+          /
+          sum(rate(http_server_requests_seconds_count{job="mado-backend"}[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP 5xx error rate (> 5 %)"
+          description: "{{ $value | humanizePercentage }} of requests are returning 5xx errors."
+
+      # ── Payment failures ────────────────────────────────────────
+      # Requires Counter bean: mado_payment_failure_total in SubscriptionService / StripeWebhookService
+      - alert: PaymentFailures
+        expr: increase(mado_payment_failure_total{job="mado-backend"}[10m]) > 5
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Multiple payment failures in the last 10 minutes"
+          description: "{{ $value }} payment failures detected. Check Stripe dashboard."
+
+      # ── Stream publish errors ───────────────────────────────────
+      # Requires Counter bean: mado_stream_publish_error_total in StreamService
+      - alert: StreamPublishErrors
+        expr: increase(mado_stream_publish_error_total{job="mado-backend"}[10m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Stream publish errors detected"
+          description: "{{ $value }} stream publish errors in the last 10 minutes."
+
+      # ── JVM heap > 90 % ─────────────────────────────────────────
+      - alert: HighHeapUsage
+        expr: |
+          jvm_memory_used_bytes{area="heap",job="mado-backend"}
+          /
+          jvm_memory_max_bytes{area="heap",job="mado-backend"}
+          > 0.90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "JVM heap above 90 %"
+          description: "Heap at {{ humanizePercentage $value }} — risk of OutOfMemoryError."
+
+      # ── p95 API latency > 2 s ───────────────────────────────────
+      - alert: SlowApiRequests
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_server_requests_seconds_bucket{job="mado-backend"}[5m])) by (le)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 API latency above 2 s"
+          description: "95th-percentile response time is {{ $value | humanizeDuration }}."

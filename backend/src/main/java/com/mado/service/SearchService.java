@@ -7,6 +7,7 @@ import com.mado.dto.CategoryResponse;
 import com.mado.repository.CategoryRepository;
 import com.mado.repository.ChannelRepository;
 import com.mado.repository.ClipRepository;
+import com.mado.util.TextSanitizer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -28,7 +29,10 @@ public class SearchService {
         if (q == null || q.isBlank()) {
             return SearchResponse.builder().channels(List.of()).clips(List.of()).categories(List.of()).build();
         }
-        String term = q.trim();
+        String term = TextSanitizer.plainText(q.trim(), 200);
+        if (term.isBlank()) {
+            return SearchResponse.builder().channels(List.of()).clips(List.of()).categories(List.of()).build();
+        }
         if ("clip".equalsIgnoreCase(type)) {
             return SearchResponse.builder()
                     .channels(List.of())

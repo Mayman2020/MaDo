@@ -4,9 +4,11 @@ import com.mado.dto.UserPatchRequest;
 import com.mado.dto.UserResponse;
 import com.mado.entity.User;
 import com.mado.security.CustomUserDetails;
+import com.mado.service.FileStorageService;
 import com.mado.service.UserProfileService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,7 +17,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
 
@@ -25,6 +29,7 @@ import java.util.Map;
 public class UserController {
 
     private final UserProfileService userProfileService;
+    private final FileStorageService fileStorageService;
 
     @GetMapping("/{username}")
     public ResponseEntity<UserResponse> get(@PathVariable String username) {
@@ -40,12 +45,24 @@ public class UserController {
         return ResponseEntity.ok(userProfileService.patch(username, request, actor));
     }
 
-    @PostMapping("/{username}/avatar")
-    public ResponseEntity<Map<String, String>> avatar(
+    @PostMapping(value = "/{username}/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<UserResponse> uploadAvatar(
             @PathVariable String username,
-            @AuthenticationPrincipal CustomUserDetails principal) {
-        requireUser(principal);
-        return ResponseEntity.ok(Map.of("status", "pending", "message", "Upload to MinIO not wired in this build"));
+            @RequestPart("file") MultipartFile file,
+            @AuthenticationPrincipal CustomUserDetails principal) throws Exception {
+        User actor = requireUser(principal);
+        String url = fileStorageService.store(file, "avatars");
+        return ResponseEntity.ok(userProfileService.updateAvatar(username, url, actor));
+    }
+
+    @PostMapping(value = "/{username}/banner", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<UserResponse> uploadBanner(
+            @PathVariable String username,
+            @RequestPart("file") MultipartFile file,
+            @AuthenticationPrincipal CustomUserDetails principal) throws Exception {
+        User actor = requireUser(principal);
+        String url = fileStorageService.store(file, "banners");
+        return ResponseEntity.ok(userProfileService.updateBanner(username, url, actor));
     }
 
     private static User requireUser(CustomUserDetails principal) {

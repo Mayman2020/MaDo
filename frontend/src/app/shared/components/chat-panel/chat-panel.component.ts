@@ -3,7 +3,30 @@ import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { ChatMessage, ChatService } from '../../../core/services/chat.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { EngagementService } from '../../../core/services/engagement.service';
 import { Subscription } from 'rxjs';
+
+interface PollState {
+  id: string;
+  title: string;
+  status: string;
+  totalVotes: number;
+  options: { id: string; title: string; voteCount: number }[];
+}
+
+interface PredictionState {
+  id: string;
+  title: string;
+  status: string;
+  winningOptionId?: string;
+  options: { id: string; title: string; totalPoints: number; participantCount: number }[];
+}
+
+interface RaidEvent {
+  raidId: string;
+  fromUsername: string;
+  viewerCount: number;
+}
 
 @Component({
   selector: 'mado-chat-panel',
@@ -38,9 +61,9 @@ import { Subscription } from 'rxjs';
                 }
               }
             </span>
-            <span class="name" [style.color]="m.color || 'var(--accent)'">{{ m.displayName }}</span>
+            <span class="name" [style.color]="m.color || 'var(--accent)'" [textContent]="m.displayName"></span>
             <span class="colon">: </span>
-            <span class="text">{{ m.content }}</span>
+            <span class="text" [textContent]="m.content"></span>
           </div>
         }
         @if (pauseScroll && messages.length > 0) {
@@ -49,6 +72,51 @@ import { Subscription } from 'rxjs';
           </div>
         }
       </div>
+
+      @if (incomingRaid) {
+        <div class="raid-banner">
+          <span class="raid-icon">⚔️</span>
+          <strong [textContent]="incomingRaid.fromUsername"></strong> is raiding with {{ incomingRaid.viewerCount }} viewers!
+        </div>
+      }
+
+      @if (activePoll?.status === 'ACTIVE') {
+        <div class="poll-overlay">
+          <div class="poll-title">📊 {{ activePoll!.title }}</div>
+          @for (o of activePoll!.options; track o.id) {
+            <button class="poll-opt" (click)="votePoll(activePoll!.id, o.id)">
+              {{ o.title }}
+              @if (activePoll!.totalVotes > 0) {
+                <span class="poll-pct">{{ ((o.voteCount / activePoll!.totalVotes) * 100).toFixed(0) }}%</span>
+              }
+            </button>
+          }
+          <div class="poll-total">{{ activePoll!.totalVotes }} votes</div>
+        </div>
+      }
+
+      @if (activePrediction) {
+        <div class="pred-overlay">
+          <div class="pred-title">🔮 {{ activePrediction!.title }}</div>
+          <div class="pred-status-badge" [class.active]="activePrediction!.status === 'ACTIVE'" [class.resolved]="activePrediction!.status === 'RESOLVED'">
+            {{ activePrediction!.status }}
+          </div>
+          @if (activePrediction!.status === 'ACTIVE') {
+            @for (o of activePrediction!.options; track o.id) {
+              <button class="pred-opt" (click)="betOnPrediction(activePrediction!.id, o.id)">
+                {{ o.title }}
+                <span class="pred-pts">{{ o.totalPoints }} pts · {{ o.participantCount }} bets</span>
+              </button>
+            }
+          } @else if (activePrediction!.status === 'RESOLVED') {
+            @for (o of activePrediction!.options; track o.id) {
+              <div class="pred-result" [class.winner]="o.id === activePrediction!.winningOptionId">
+                {{ o.title }} @if (o.id === activePrediction!.winningOptionId) { ✅ }
+              </div>
+            }
+          }
+        </div>
+      }
 
       @if (auth.getAccessToken()) {
         <div class="send">
@@ -217,24 +285,76 @@ import { Subscription } from 'rxjs';
     }
     .hint a { color: var(--accent); text-decoration: none; }
     .hint a:hover { text-decoration: underline; }
+    .raid-banner {
+      padding: .6rem .75rem; background: rgba(229,57,53,.15); border-top: 2px solid #e53935;
+      color: #e57373; font-size: .82rem; font-weight: 700; flex-shrink: 0;
+      animation: raidPulse 1s ease-in-out infinite alternate;
+    }
+    .raid-icon { margin-right: .3rem; }
+    @keyframes raidPulse { from { background: rgba(229,57,53,.1); } to { background: rgba(229,57,53,.25); } }
+    .poll-overlay {
+      padding: .6rem .75rem; border-top: 1px solid var(--border);
+      background: rgba(83,252,24,.04); flex-shrink: 0;
+    }
+    .poll-title { font-weight: 800; font-size: .82rem; margin-bottom: .4rem; }
+    .poll-opt {
+      display: flex; justify-content: space-between; width: 100%; background: var(--bg-tertiary);
+      border: 1px solid var(--border); color: var(--text-primary); border-radius: 6px;
+      padding: .3rem .6rem; margin-bottom: .3rem; cursor: pointer; font-size: .8rem; font-weight: 600;
+    }
+    .poll-opt:hover { border-color: var(--accent); }
+    .poll-pct { color: var(--accent); }
+    .poll-total { font-size: .72rem; color: var(--text-muted); text-align: right; }
+    .pred-overlay {
+      padding: .6rem .75rem; border-top: 1px solid var(--border);
+      background: rgba(128,0,255,.04); flex-shrink: 0;
+    }
+    .pred-title { font-weight: 800; font-size: .82rem; margin-bottom: .25rem; }
+    .pred-status-badge {
+      display: inline-block; font-size: .65rem; font-weight: 900; padding: .1rem .4rem;
+      border-radius: 4px; margin-bottom: .4rem; letter-spacing: .05em;
+      background: var(--bg-tertiary); color: var(--text-muted);
+    }
+    .pred-status-badge.active { background: rgba(83,252,24,.15); color: var(--accent); }
+    .pred-status-badge.resolved { background: rgba(0,191,255,.1); color: #00bfff; }
+    .pred-opt {
+      display: flex; justify-content: space-between; width: 100%; background: var(--bg-tertiary);
+      border: 1px solid var(--border); color: var(--text-primary); border-radius: 6px;
+      padding: .3rem .6rem; margin-bottom: .3rem; cursor: pointer; font-size: .8rem;
+    }
+    .pred-opt:hover { border-color: #9b59b6; }
+    .pred-pts { color: var(--text-muted); font-size: .72rem; }
+    .pred-result {
+      padding: .25rem .5rem; font-size: .8rem; border-radius: 6px;
+      margin-bottom: .2rem; background: var(--bg-tertiary);
+    }
+    .pred-result.winner { background: rgba(83,252,24,.12); color: var(--accent); font-weight: 800; }
   `]
 })
 export class ChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked {
   @Input({ required: true }) channelId!: string;
+  @Input() channelUsername = '';
   @ViewChild('viewport') viewportRef!: ElementRef<HTMLDivElement>;
 
   messages: ChatMessage[] = [];
   draft = '';
   pauseScroll = false;
+  activePoll: PollState | null = null;
+  activePrediction: PredictionState | null = null;
+  incomingRaid: RaidEvent | null = null;
 
   private msgSub?: Subscription;
   private needsScroll = false;
   private readonly MAX_MESSAGES = 200;
+  private pollSub?: { unsubscribe(): void };
+  private predSub?: { unsubscribe(): void };
+  private raidSub?: { unsubscribe(): void };
 
   constructor(
     readonly auth: AuthService,
     private readonly chat: ChatService,
-    private readonly http: HttpClient
+    private readonly http: HttpClient,
+    private readonly engagement: EngagementService
   ) {}
 
   ngOnInit(): void {
@@ -254,6 +374,30 @@ export class ChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked {
         this.needsScroll = true;
       }
     });
+
+    // Wait for STOMP to connect then subscribe to polls/predictions
+    const waitForClient = () => {
+      if (this.chat['client']?.connected) {
+        this.pollSub = this.chat['client'].subscribe(
+          `/topic/channel.${this.channelId}.polls`,
+          msg => { this.activePoll = JSON.parse(msg.body); }
+        );
+        this.predSub = this.chat['client'].subscribe(
+          `/topic/channel.${this.channelId}.predictions`,
+          msg => { this.activePrediction = JSON.parse(msg.body); }
+        );
+        this.raidSub = this.chat['client'].subscribe(
+          `/topic/channel.${this.channelId}.raid`,
+          msg => {
+            this.incomingRaid = JSON.parse(msg.body);
+            setTimeout(() => { this.incomingRaid = null; }, 8000);
+          }
+        );
+      } else {
+        setTimeout(waitForClient, 500);
+      }
+    };
+    setTimeout(waitForClient, 1000);
   }
 
   ngAfterViewChecked(): void {
@@ -263,7 +407,20 @@ export class ChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
   }
 
+  votePoll(pollId: string, optionId: string): void {
+    if (!this.channelUsername || !this.auth.currentUser$.value) return;
+    this.engagement.votePoll(this.channelUsername, pollId, optionId).subscribe();
+  }
+
+  betOnPrediction(predictionId: string, optionId: string): void {
+    if (!this.channelUsername || !this.auth.currentUser$.value) return;
+    this.engagement.betPrediction(this.channelUsername, predictionId, { optionId, pointsWagered: 100 }).subscribe();
+  }
+
   ngOnDestroy(): void {
+    this.pollSub?.unsubscribe();
+    this.predSub?.unsubscribe();
+    this.raidSub?.unsubscribe();
     this.msgSub?.unsubscribe();
     this.chat.disconnect();
   }

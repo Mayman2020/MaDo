@@ -5,10 +5,12 @@ import com.mado.dto.StreamDetailResponse;
 import com.mado.dto.StreamPublishRequest;
 import com.mado.entity.Channel;
 import com.mado.entity.Stream;
+import com.mado.event.StreamEndedEvent;
 import com.mado.exception.NotFoundException;
 import com.mado.repository.ChannelRepository;
 import com.mado.repository.StreamRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,13 +26,15 @@ public class StreamService {
     private final ChannelRepository channelRepository;
     private final StreamRepository streamRepository;
     private final ChannelService channelService;
+    private final ApplicationEventPublisher eventPublisher;
+    private final EmailNotificationService emailNotificationService;
 
     @Transactional
     public Map<String, String> onPublish(StreamPublishRequest request) {
         if (request == null || request.getName() == null || request.getName().isBlank()) {
             return Map.of("status", "rejected", "reason", "missing stream name");
         }
-        Channel ch = channelRepository.findByStreamKey(request.getName())
+        Channel ch = channelRepository.findByStreamKeyWithUser(request.getName())
                 .orElseThrow(() -> new NotFoundException("Invalid stream key"));
         ch.setIsLive(true);
         Stream stream = Stream.builder()
@@ -43,6 +47,7 @@ public class StreamService {
                 .startedAt(Instant.now())
                 .build();
         streamRepository.save(stream);
+        emailNotificationService.notifyFollowersChannelLive(ch);
         return Map.of("status", "live", "channelId", ch.getId().toString());
     }
 
@@ -56,11 +61,21 @@ public class StreamService {
             return Map.of("status", "unknown");
         }
         ch.setIsLive(false);
-        streamRepository.findFirstByChannelIdAndEndedAtIsNullOrderByStartedAtDesc(ch.getId())
-                .ifPresent(s -> {
-                    s.setEndedAt(Instant.now());
-                    streamRepository.save(s);
-                });
+        ch.setViewerCount(0);
+        UUID endedStreamId = null;
+        var activeOpt = streamRepository.findFirstByChannelIdAndEndedAtIsNullOrderByStartedAtDesc(ch.getId());
+        if (activeOpt.isPresent()) {
+            Stream s = activeOpt.get();
+            endedStreamId = s.getId();
+            s.setEndedAt(Instant.now());
+            streamRepository.save(s);
+            long streamViews = s.getPeakViewers() == null ? 0L : s.getPeakViewers();
+            ch.setTotalViews((ch.getTotalViews() == null ? 0L : ch.getTotalViews()) + streamViews);
+        }
+        channelRepository.save(ch);
+        if (endedStreamId != null) {
+            eventPublisher.publishEvent(new StreamEndedEvent(endedStreamId));
+        }
         return Map.of("status", "offline", "channelId", ch.getId().toString());
     }
 

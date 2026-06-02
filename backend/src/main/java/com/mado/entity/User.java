@@ -15,6 +15,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -39,6 +40,7 @@ public class User {
     private String email;
 
     @Column(name = "password_hash", nullable = false, length = 255)
+    @JsonIgnore
     private String passwordHash;
 
     @Column(name = "display_name", length = 50)
@@ -73,10 +75,14 @@ public class User {
     private Boolean twoFaEnabled;
 
     @Column(name = "two_fa_secret", length = 100)
+    @JsonIgnore
     private String twoFaSecret;
 
     @Column(name = "follower_count")
     private Integer followerCount;
+
+    @Column(name = "coins_balance")
+    private Long coinsBalance;
 
     @Column(name = "created_at")
     private Instant createdAt;
@@ -109,6 +115,9 @@ public class User {
         }
         if (followerCount == null) {
             followerCount = 0;
+        }
+        if (coinsBalance == null) {
+            coinsBalance = 0L;
         }
     }
 

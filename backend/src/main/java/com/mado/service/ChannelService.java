@@ -15,6 +15,7 @@ import com.mado.entity.Stream;
 import com.mado.entity.User;
 import com.mado.exception.BadRequestException;
 import com.mado.exception.NotFoundException;
+import com.mado.util.TextSanitizer;
 import com.mado.repository.CategoryRepository;
 import com.mado.repository.ChannelRepository;
 import com.mado.repository.StreamRepository;
@@ -38,14 +39,18 @@ public class ChannelService {
     private final UserRepository userRepository;
     private final StreamingProperties streamingProperties;
 
+    /**
+     * @param viewerOrNull when null or not the channel owner (and not admin), the RTMP stream key is omitted.
+     */
     @Transactional
-    public ChannelPublicResponse getByUsername(String username) {
-        return channelRepository.findByUserUsername(username)
-                .map(this::toPublic)
+    public ChannelPublicResponse getByUsername(String username, User viewerOrNull) {
+        Channel ch = channelRepository.findByUserUsername(username)
                 .orElseGet(() -> userRepository.findByUsername(username)
                         .map(this::getOrCreateForUser)
-                        .map(this::toPublic)
                         .orElseThrow(() -> new NotFoundException("Channel not found")));
+        boolean includeKey = viewerOrNull != null
+                && (viewerOrNull.getId().equals(ch.getUser().getId()) || viewerOrNull.getRole() == Role.ADMIN);
+        return toPublic(ch, includeKey);
     }
 
     @Transactional
@@ -56,17 +61,18 @@ public class ChannelService {
             throw new BadRequestException("Not allowed");
         }
         if (req.getTitle() != null) {
-            ch.setTitle(req.getTitle());
+            ch.setTitle(TextSanitizer.plainText(req.getTitle(), 140));
         }
         if (req.getDescription() != null) {
-            ch.setDescription(req.getDescription());
+            ch.setDescription(TextSanitizer.plainText(req.getDescription(), 8000));
         }
         if (req.getCategorySlug() != null && !req.getCategorySlug().isBlank()) {
             Category cat = categoryRepository.findBySlug(req.getCategorySlug())
                     .orElseThrow(() -> new BadRequestException("Unknown category"));
             ch.setCategory(cat);
         }
-        return toPublic(ch);
+        boolean includeKey = actor.getId().equals(ch.getUser().getId()) || actor.getRole() == Role.ADMIN;
+        return toPublic(ch, includeKey);
     }
 
     @Transactional(readOnly = true)
@@ -143,10 +149,10 @@ public class ChannelService {
 
     @Transactional(readOnly = true)
     public ChannelPublicResponse toPublicDto(Channel ch) {
-        return toPublic(ch);
+        return toPublic(ch, false);
     }
 
-    private ChannelPublicResponse toPublic(Channel ch) {
+    private ChannelPublicResponse toPublic(Channel ch, boolean includeStreamKey) {
         boolean live = Boolean.TRUE.equals(ch.getIsLive());
         UUID currentStreamId = live
                 ? streamRepository.findFirstByChannelIdAndEndedAtIsNullOrderByStartedAtDesc(ch.getId())
@@ -163,13 +169,17 @@ public class ChannelService {
                 .viewerCount(ch.getViewerCount() == null ? 0 : ch.getViewerCount())
                 .categorySlug(ch.getCategory() != null ? ch.getCategory().getSlug() : null)
                 .categoryName(ch.getCategory() != null ? ch.getCategory().getName() : null)
-                .streamKey(ch.getStreamKey())
+                .streamKey(includeStreamKey ? ch.getStreamKey() : null)
                 .hlsMasterUrl(live
                         ? streamingProperties.getHlsBaseUrl() + "/" + ch.getStreamKey() + "/index.m3u8"
                         : null)
                 .currentStreamId(currentStreamId)
                 .followerCount(ch.getFollowerCount() == null ? 0 : ch.getFollowerCount())
                 .totalViews(ch.getTotalViews() == null ? 0L : ch.getTotalViews())
+                .isSubscriptionEnabled(Boolean.TRUE.equals(ch.getIsSubscriptionEnabled()))
+                .subPriceTier1(ch.getSubPriceTier1())
+                .subPriceTier2(ch.getSubPriceTier2())
+                .subPriceTier3(ch.getSubPriceTier3())
                 .build();
     }
 
@@ -210,7 +220,7 @@ public class ChannelService {
         Page<Channel> page = "followers".equals(metric)
                 ? channelRepository.findAllByOrderByFollowerCountDesc(pageable)
                 : channelRepository.findAllByOrderByTotalViewsDesc(pageable);
-        return page.map(this::toPublic);
+        return page.map(ch -> toPublic(ch, false));
     }
 
     private ChatSettingsResponse toChatSettings(Channel ch) {
